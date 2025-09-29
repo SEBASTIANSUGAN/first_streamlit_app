@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# =====================
-# Constants / Mappings
-# =====================
+# ------------------------
+# Configuration
+# ------------------------
 REQUIRED_ATTRIBUTES = {
     "posted_dt": {"mandatory": False},
     "doc_dt": {"mandatory": False},
@@ -46,18 +46,12 @@ ATTRIBUTE_DEPENDENCIES = {
     "customer_name": ["Revenue Classification"]
 }
 
-# =====================
-# Helper Functions
-# =====================
-def detect_header(df):
-    for i, row in df.iterrows():
-        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
-        if "debit" in row_str and "credit" in row_str:
-            return i
-    return None
-
+# ------------------------
+# Functions
+# ------------------------
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
+
     df_columns = df.columns.tolist()
     col_mapping = {}
     missing = []
@@ -75,38 +69,55 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
-# =====================
-# Main Analysis
-# =====================
 def analyze_gl(df, user_mapping=None, show_plot=True):
-    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+    # Map attributes
     col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
 
-    st.subheader("✅ Attributes present:")
-    for p in present:
-        st.write(f" - {p}")
-
-    interactive_mapping = {}
-    if missing:
-        st.warning("⚠️ Some attributes are missing. Map them below:")
-        for attr in missing:
-            options = ["--skip--"] + list(df.columns)
-            selection = st.selectbox(f"Map '{attr}' to a column:", options, key=attr)
-            if selection != "--skip--":
-                interactive_mapping[attr] = selection
-
-        if interactive_mapping:
-            user_mapping = {**(user_mapping or {}), **interactive_mapping}
-            col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
+    # Interactive mapping for missing attributes
+    if mandatory_missing or optional_missing:
+        st.subheader("Interactive Attribute Mapping")
+        for attr in mandatory_missing + optional_missing:
+            col = st.selectbox(
+                f"Map '{attr}' to a column (skip if not available)",
+                options=[""] + list(df.columns),
+                key=attr
+            )
+            if col != "":
+                if user_mapping is None:
+                    user_mapping = {}
+                user_mapping[attr] = col
+
+        # Re-validate after user mapping
+        col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
+        mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
     if mandatory_missing:
-        st.error("❌ Mandatory attributes still missing: " + ", ".join(mandatory_missing))
+        st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
         return df, {}, None
 
-    st.success("🎯 All required attributes found or mapped!")
+    st.success("All required attributes found or mapped!")
 
-    # --- Account columns ---
+    # ------------------------
+    # Display attribute impact
+    # ------------------------
+    st.subheader("Attribute Impact on Metrics")
+    attr_impact_data = []
+    for attr in REQUIRED_ATTRIBUTES.keys():
+        status = "✅ Present" if attr in present else "⚠️ Missing"
+        affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
+        attr_impact_data.append({
+            "Attribute": attr,
+            "Status": status,
+            "Affected Metrics": ", ".join(affected_metrics)
+        })
+    st.table(pd.DataFrame(attr_impact_data))
+
+    # ------------------------
+    # KPI Calculation
+    # ------------------------
     possible_account_cols = ["account_name", "account", "gl_account", "account_code",
                              "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
@@ -117,12 +128,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
     credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
 
-    if not account_col or not debit_col or not credit_col:
-        st.error("Could not find required debit/credit/account columns.")
-        st.write("Available columns:", df.columns.tolist())
-        return df, {}, None
-
-    # --- Clean and calculate ---
     df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
     df = df[df[account_col].notna()]
     df = df[df[debit_col].notna() | df[credit_col].notna()]
@@ -156,7 +161,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     df["account_category"] = df[account_col].apply(classify_account)
 
-    # --- KPIs ---
+    # KPIs
     total = df["net_amount"].sum()
     revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
     cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
@@ -186,60 +191,70 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         "Net Margin %": net_margin_pct
     }
 
+    # Summary table
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
     summary_df = summary_df.sort_values(by="net_amount", ascending=False)
 
-    # --- Plot ---
+    # ------------------------
+    # KPI Plots
+    # ------------------------
     if show_plot:
+        st.subheader("Financial Metrics")
         metrics = ["Revenue", "COGS", "OPEX", "Gross Profit", "Net Profit"]
         values = [revenue, cogs, opex, gross_profit, net_profit]
 
-        fig, ax = plt.subplots(figsize=(8,5))
+        fig, ax = plt.subplots(figsize=(8, 5))
         bars = ax.bar(metrics, values, color=["green", "red", "blue", "orange", "purple"])
-        ax.set_title("Financial Metrics")
         ax.set_ylabel("Amount")
         ax.grid(axis="y", linestyle="--", alpha=0.7)
 
         for bar in bars:
             yval = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2, yval, f"{yval:,.0f}", ha='center', va='bottom')
+            ax.text(bar.get_x() + bar.get_width() / 2, yval, f"{yval:,.0f}",
+                     ha='center', va='bottom')
 
         st.pyplot(fig)
 
-    st.subheader("===== Finance KPIs =====")
+    st.subheader("KPIs")
     for k, v in kpis.items():
-        st.write(f"{k}: {v:,.2f}" if "%" not in k else f"{k}: {v:.2f}%")
+        if "%" in k:
+            st.write(f"{k}: {v:.2f}%")
+        else:
+            st.write(f"{k}: {v:,.2f}")
 
-    st.subheader("===== Summary by Account Category =====")
+    st.subheader("Summary by Account Category")
     st.dataframe(summary_df)
 
     return df, kpis, summary_df
 
-# =====================
-# Streamlit UI
-# =====================
-st.title("📊 Interactive General Ledger Analyzer")
+# ------------------------
+# Streamlit App
+# ------------------------
+st.title("Interactive GL Analyzer")
 
-uploaded_file = st.file_uploader("Upload Excel/CSV file", type=["xlsx","xls","csv"])
-user_mapping = {
-    "txn_amt": "transaction_amount",
-    "curr": "currency",
-    "jnl": "journal_code",
-    "Posted dt.": "posted_dt"
-}
+uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx", "csv"])
 
-if uploaded_file:
+if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
-        raw_df = pd.read_csv(uploaded_file, header=None)
+        df_raw = pd.read_csv(uploaded_file, header=None)
     else:
-        raw_df = pd.read_excel(uploaded_file, header=None)
+        df_raw = pd.read_excel(uploaded_file, header=None)
 
-    header_idx = detect_header(raw_df)
-    if header_idx is not None:
-        if uploaded_file.name.endswith(('.xls','.xlsx')):
-            df = pd.read_excel(uploaded_file, header=header_idx)
-        else:
-            df = pd.read_csv(uploaded_file, header=header_idx)
-        analyze_gl(df, user_mapping=user_mapping)
+    # Detect header row
+    header_row_idx = None
+    for i, row in df_raw.iterrows():
+        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
+        if "debit" in row_str and "credit" in row_str:
+            header_row_idx = i
+            break
+    if header_row_idx is None:
+        st.error("Could not detect header row with Debit/Credit columns")
     else:
-        st.error("Could not detect header row with Debit/Credit columns.")
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file, header=header_row_idx)
+        else:
+            df = pd.read_excel(uploaded_file, header=header_row_idx)
+        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+
+        # Run analysis
+        analyze_gl(df)
