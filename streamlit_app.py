@@ -1,10 +1,10 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import plotly.graph_objects as go
 
-# =======================
-# Constants & Mappings
-# =======================
+# =========================
+# Configuration
+# =========================
 REQUIRED_ATTRIBUTES = {
     "posted_dt": {"mandatory": False},
     "doc_dt": {"mandatory": False},
@@ -46,15 +46,29 @@ ATTRIBUTE_DEPENDENCIES = {
     "customer_name": ["Revenue Classification"]
 }
 
-# =======================
+# =========================
 # Functions
-# =======================
+# =========================
+def request_custom_mapping(df, missing_attrs):
+    """Ask user to map missing attributes to actual columns via Streamlit selectboxes."""
+    mapping = {}
+    st.write("### Map Missing Attributes")
+    for attr in missing_attrs:
+        col = st.selectbox(
+            f"Select column for '{attr}' (optional, skip if not available)",
+            options=[None] + list(df.columns),
+            index=0,
+            key=attr
+        )
+        if col:
+            mapping[attr] = col
+    return mapping
+
+
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
     df_columns = df.columns.tolist()
-    col_mapping = {}
-    missing = []
-    present = []
+    col_mapping, missing, present = {}, [], []
 
     for attr, props in REQUIRED_ATTRIBUTES.items():
         if attr in df_columns:
@@ -68,50 +82,40 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
+
 def analyze_gl(df, user_mapping=None):
     col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
 
-    st.subheader("Attributes Check")
-    st.markdown("**Attributes Present:**")
-    for p in present:
-        affected_metrics = ATTRIBUTE_DEPENDENCIES.get(p, ["General KPIs"])
-        st.write(f" - {p} (affects: {', '.join(affected_metrics)})")
-
-    if missing:
-        st.markdown("**Missing Attributes:**")
-        for m in missing:
-            affected_metrics = ATTRIBUTE_DEPENDENCIES.get(m, ["General KPIs"])
-            st.write(f" - {m} (affects: {', '.join(affected_metrics)})")
-
-        # Interactive mapping
-        mapping = {}
-        for m in missing:
-            col = st.selectbox(f"Map missing attribute '{m}' to actual column:", options=[""] + list(df.columns))
-            if col:
-                mapping[m] = col
-
-        if mapping:
-            user_mapping = {**(user_mapping or {}), **mapping}
-            col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-
-    # Early exit if mandatory columns still missing
+    # Separate mandatory and optional
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
-    if mandatory_missing:
-        st.error(f"Mandatory columns still missing: {mandatory_missing}")
-        return df, {}, None
+    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # Determine key columns
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
-                             "description", "memo_description"]
-    account_col = next((c for c in possible_account_cols if c in df.columns), None)
+    # Interactive mapping for missing attributes
+    if mandatory_missing + optional_missing:
+        extra_mapping = request_custom_mapping(df, mandatory_missing + optional_missing)
+        user_mapping = {**(user_mapping or {}), **extra_mapping}
+        col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
+        mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
+    # Stop if mandatory attributes are missing
+    if mandatory_missing:
+        st.error(f"Missing mandatory attributes: {mandatory_missing}. Cannot continue.")
+        return None, None, None, None, None
+
+    # Show attribute mapping info
+    st.write("### Attribute Status")
+    for attr in REQUIRED_ATTRIBUTES:
+        if attr in present:
+            st.success(f"{attr} → Present (affects: {', '.join(ATTRIBUTE_DEPENDENCIES.get(attr, []))})")
+        else:
+            st.warning(f"{attr} → Missing (affects: {', '.join(ATTRIBUTE_DEPENDENCIES.get(attr, []))})")
+
+    # Identify columns
+    account_col = next((c for c in ["account_name", "account", "gl_account", "account_code", "description", "memo_description"] if c in df.columns), None)
     debit_col = next((c for c in ["debit", "debit_gbp", "debits", "dr"] if c in df.columns), None)
     credit_col = next((c for c in ["credit", "credit_gbp", "credits", "cr"] if c in df.columns), None)
 
-    if not account_col or not debit_col or not credit_col:
-        st.error("Required account/debit/credit columns not found.")
-        return df, {}, None
-
-    # Clean data
+    # Clean and calculate
     df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
     df = df[df[account_col].notna()]
     df = df[df[debit_col].notna() | df[credit_col].notna()]
@@ -119,7 +123,7 @@ def analyze_gl(df, user_mapping=None):
     for col in [debit_col, credit_col]:
         df[col] = (df[col].astype(str).str.replace(",", "").str.replace(" ", "").replace("", "0").astype(float))
 
-    df["net_amount"] = df[debit_col] - df[credit_col]
+    df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
 
     # Account classification
     account_mapping = {
@@ -130,88 +134,67 @@ def analyze_gl(df, user_mapping=None):
         "Other Expense": ["interest", "depreciation", "amortization", "loss"]
     }
 
-    def classify_account(account_name):
-        if pd.isna(account_name):
+    def classify_account(name):
+        if pd.isna(name):
             return "Unclassified"
-        name = str(account_name).lower().replace(" ", "")
-        for category, keywords in account_mapping.items():
+        name = str(name).lower().replace(" ", "")
+        for cat, keywords in account_mapping.items():
             if any(k in name for k in keywords):
-                return category
+                return cat
         return "Unclassified"
 
     df["account_category"] = df[account_col].apply(classify_account)
 
-    # KPI calculations
-    revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
-    cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
-    opex = df[df["account_category"] == "OPEX"]["net_amount"].sum()
-    other_income = df[df["account_category"] == "Other Income"]["net_amount"].sum()
-    other_expense = df[df["account_category"] == "Other Expense"]["net_amount"].sum()
+    # Calculate KPIs
+    kpis = {}
+    for cat in ["Revenue", "COGS", "OPEX", "Other Income", "Other Expense"]:
+        kpis[cat] = df[df["account_category"] == cat]["net_amount"].sum()
 
-    gross_profit = revenue - cogs
-    ebitda = gross_profit - opex
-    net_profit = ebitda + other_income - other_expense
+    gross_profit = kpis["Revenue"] - kpis["COGS"]
+    ebitda = gross_profit - kpis["OPEX"]
+    net_profit = ebitda + kpis["Other Income"] - kpis["Other Expense"]
 
-    kpis = {
-        "Revenue": revenue,
-        "COGS": cogs,
-        "OPEX": opex,
+    kpis.update({
         "Gross Profit": gross_profit,
+        "EBITDA": ebitda,
         "Net Profit": net_profit
-    }
+    })
 
-    # 3D Plot using Plotly
-    fig = go.Figure(data=[go.Bar3d(
-        x=list(kpis.keys()),
-        y=[0]*len(kpis),
-        z=[0]*len(kpis),
-        dx=[0.5]*len(kpis),
-        dy=[0.5]*len(kpis),
-        dz=list(kpis.values()),
-        text=[f"{v:,.0f}" for v in kpis.values()],
-        hoverinfo='x+dz+text',
-        marker=dict(color=['green','red','blue','orange','purple'])
-    )])
+    summary_df = df.groupby("account_category")["net_amount"].sum().reset_index().sort_values(by="net_amount", ascending=False)
 
-    fig.update_layout(
-        title='Financial Metrics (3D)',
-        scene=dict(
-            xaxis_title='Metrics',
-            yaxis_title='',
-            zaxis_title='Amount'
-        )
-    )
+    return df, kpis, summary_df, account_col, (debit_col, credit_col)
 
-    st.plotly_chart(fig, use_container_width=True)
 
-    return df, kpis, df.groupby("account_category")["net_amount"].sum().reset_index()
+# =========================
+# Streamlit App
+# =========================
+st.title("Interactive GL Analyzer")
 
-# =======================
-# Streamlit UI
-# =======================
-st.title("Interactive General Ledger Analyzer")
-
-uploaded_file = st.file_uploader("Upload GL file (Excel/CSV)", type=["xlsx","csv"])
-
+uploaded_file = st.file_uploader("Upload your GL file (CSV or Excel)", type=["csv", "xlsx"])
 if uploaded_file:
+    # Load file
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
-        df = pd.read_excel(uploaded_file, header=None)
+        df = pd.read_excel(uploaded_file)
 
-    # Detect header row
-    header_row_idx = 0
-    for i, row in df.iterrows():
-        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
-        if "debit" in row_str and "credit" in row_str:
-            header_row_idx = i
-            break
+    df, kpis, summary_df, account_col, debit_credit_cols = analyze_gl(df)
 
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file, header=header_row_idx)
-    else:
-        df = pd.read_excel(uploaded_file, header=header_row_idx)
+    if df is not None:
+        st.write("### Summary Table")
+        st.dataframe(summary_df)
 
-    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+        # Plotly attractive 3D-like bar chart
+        metrics = list(kpis.keys())
+        values = list(kpis.values())
 
-    df, kpis, summary_df = analyze_gl(df)
+        fig = go.Figure(data=[go.Bar(
+            x=metrics,
+            y=values,
+            marker=dict(color=values, colorscale='Viridis', line=dict(color='rgb(8,48,107)', width=1.5)),
+            text=[f"{v:,.0f}" for v in values],
+            textposition='auto'
+        )])
+
+        fig.update_layout(title="Financial Metrics", yaxis_title="Amount (£)", template="plotly_dark")
+        st.plotly_chart(fig)
