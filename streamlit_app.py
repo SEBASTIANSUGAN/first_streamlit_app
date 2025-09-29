@@ -1,7 +1,8 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
 
-# ==== Configuration ====
+# ====== Your existing constants ======
 REQUIRED_ATTRIBUTES = {
     "posted_dt": {"mandatory": False},
     "doc_dt": {"mandatory": False},
@@ -26,87 +27,189 @@ CUSTOM_MAPPING = {
     "balance_(gbp)": "balance_gbp",
 }
 
-# ==== Functions ====
-def analyze_gl(df: pd.DataFrame, user_mapping=None):
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+ATTRIBUTE_DEPENDENCIES = {
+    "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
+    "credit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
+    "balance_gbp": ["Net Profit"],
+    "txn_amt": ["Revenue", "COGS", "OPEX"],
+    "curr": ["Revenue", "COGS", "OPEX"],
+    "jnl": ["OPEX", "COGS"],
+    "posted_dt": ["Revenue trends", "Period-based KPIs"],
+    "doc_dt": ["Revenue trends", "Period-based KPIs"],
+    "doc": ["Audit/Traceability"],
+    "memo_description": ["OPEX Classification", "COGS Classification"],
+    "department_name": ["OPEX Classification"],
+    "supplier_name": ["COGS Classification"],
+    "item_name": ["COGS Classification"],
+    "customer_name": ["Revenue Classification"]
+}
 
-    # Apply auto-mapping
-    for old, new in CUSTOM_MAPPING.items():
-        if old in df.columns and new not in df.columns:
-            df.rename(columns={old: new}, inplace=True)
+# ====== Interactive mapping function ======
+def request_custom_mapping(df, missing_attrs):
+    st.warning("Some attributes are missing. Please map them below:")
+    user_mapping = {}
+    for attr in missing_attrs:
+        col = st.selectbox(
+            f"Select column to map '{attr}' (optional, skip to leave unmapped)",
+            options=[""] + list(df.columns),
+            index=0,
+            key=attr
+        )
+        if col:
+            user_mapping[attr] = col
+    return user_mapping
 
-    # Attributes check
-    missing, present = [], []
-    for attr, meta in REQUIRED_ATTRIBUTES.items():
-        if attr not in df.columns:
-            missing.append((attr, meta["mandatory"]))
-        else:
+# ====== Validate & Map ======
+def validate_and_map_attributes(df, user_mapping=None):
+    df.rename(columns=CUSTOM_MAPPING, inplace=True)
+    df_columns = df.columns.tolist()
+    col_mapping, missing, present = {}, [], []
+
+    for attr, props in REQUIRED_ATTRIBUTES.items():
+        if attr in df_columns:
+            col_mapping[attr] = attr
             present.append(attr)
+        elif user_mapping and attr in user_mapping and user_mapping[attr] in df_columns:
+            col_mapping[attr] = user_mapping[attr]
+            present.append(attr)
+        else:
+            missing.append(attr)
 
-    # Apply user-provided mapping (from Streamlit)
-    if user_mapping:
-        df.rename(columns=user_mapping, inplace=True)
-        # Re-check after mapping
-        missing = [(a, m) for a, m in missing if a not in df.columns]
-        present = list(set(df.columns).intersection(REQUIRED_ATTRIBUTES.keys()))
+    return col_mapping, missing, present
 
-    return df, present, missing
+# ====== Main analyze function (same as your code) ======
+def analyze_gl(df, user_mapping=None, show_plot=True):
+    col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
 
+    mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-# ==== Streamlit UI ====
-st.set_page_config(page_title="GL Analyzer", layout="wide")
+    st.subheader("Attributes present:")
+    for p in present:
+        st.write(f"✅ {p}")
 
-st.title("General Ledger Analyzer")
-st.write("Upload your GL file (CSV or Excel) and validate required attributes.")
+    if mandatory_missing or optional_missing:
+        extra_mapping = request_custom_mapping(df, mandatory_missing + optional_missing)
+        if extra_mapping:
+            user_mapping = {**(user_mapping or {}), **extra_mapping}
+            col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
+            mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-# File upload
-uploaded_file = st.file_uploader("Upload GL file", type=["csv", "xlsx"])
+        if mandatory_missing:
+            st.error("Mandatory mappings still missing. Cannot continue.")
+            return df, {}, None
+
+    st.success("All required attributes found or mapped!")
+
+    # --- KPI logic ---
+    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
+                             "description", "memo_description"]
+    account_col = next((c for c in possible_account_cols if c in df.columns), None)
+
+    possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
+    possible_credit_cols = ["credit", "credit_gbp", "credits", "cr"]
+
+    debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
+    credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
+
+    if not account_col or not debit_col or not credit_col:
+        st.error("Could not find required debit/credit/account columns.")
+        return df, {}, None
+
+    df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
+    df = df[df[account_col].notna()]
+    df = df[df[debit_col].notna() | df[credit_col].notna()]
+
+    for col in [debit_col, credit_col]:
+        df[col] = (df[col]
+                   .astype(str)
+                   .str.replace(",", "")
+                   .str.replace(" ", "")
+                   .replace("", "0")
+                   .astype(float))
+
+    df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
+
+    account_mapping = {
+        "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
+        "COGS": ["cogs", "cost", "goods", "inventory", "hosting", "support"],
+        "OPEX": ["expense", "operating", "salary", "rent", "utilities", "marketing", "wages"],
+        "Other Income": ["interest", "misc", "gain"],
+        "Other Expense": ["interest", "depreciation", "amortization", "loss"]
+    }
+
+    def classify_account(account_name):
+        if pd.isna(account_name):
+            return "Unclassified"
+        name = str(account_name).lower().replace(" ", "")
+        for category, keywords in account_mapping.items():
+            if any(k in name for k in keywords):
+                return category
+        return "Unclassified"
+
+    df["account_category"] = df[account_col].apply(classify_account)
+
+    total = df["net_amount"].sum()
+    revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
+    cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
+    opex = df[df["account_category"] == "OPEX"]["net_amount"].sum()
+    other_income = df[df["account_category"] == "Other Income"]["net_amount"].sum()
+    other_expense = df[df["account_category"] == "Other Expense"]["net_amount"].sum()
+
+    gross_profit = revenue - cogs
+    ebitda = gross_profit - opex
+    net_profit = ebitda + other_income - other_expense
+
+    kpis = {
+        "Total": total,
+        "Revenue": revenue,
+        "COGS": cogs,
+        "Gross Profit": gross_profit,
+        "OPEX": opex,
+        "EBITDA": ebitda,
+        "Other Income": other_income,
+        "Other Expense": other_expense,
+        "Net Profit": net_profit
+    }
+
+    summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
+    summary_df = summary_df.sort_values(by="net_amount", ascending=False)
+
+    if show_plot:
+        metrics = ["Revenue", "COGS", "OPEX", "Gross Profit", "Net Profit"]
+        values = [revenue, cogs, opex, gross_profit, net_profit]
+
+        fig, ax = plt.subplots(figsize=(8,5))
+        bars = ax.bar(metrics, values, color=["green", "red", "blue", "orange", "purple"])
+        ax.set_title("Financial Metrics")
+        ax.set_ylabel("Amount")
+        ax.grid(axis="y", linestyle="--", alpha=0.7)
+
+        for bar in bars:
+            yval = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, yval, f"{yval:,.0f}", ha='center', va='bottom')
+
+        st.pyplot(fig)
+
+    st.subheader("Finance KPIs")
+    for k, v in kpis.items():
+        st.write(f"{k}: {v:,.2f}")
+
+    st.subheader("Summary by Account Category")
+    st.dataframe(summary_df)
+
+    return df, kpis, summary_df
+
+# ====== Streamlit UI ======
+st.title("📊 Interactive General Ledger Analyzer")
+
+uploaded_file = st.file_uploader("Upload your Excel/CSV file", type=["xlsx", "xls", "csv"])
 
 if uploaded_file:
-    # Load file
     if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, header=None)
     else:
-        df = pd.read_excel(uploaded_file)
+        df = pd.read_excel(uploaded_file, header=None)
 
-    st.subheader(" Sample Data")
-    st.dataframe(df.head())
-
-    # Run initial analysis
-    df, present, missing = analyze_gl(df)
-
-    st.subheader(" Attributes Present")
-    st.write(present)
-
-    if missing:
-        st.subheader(" Missing Attributes")
-        st.write(missing)
-
-        st.info("Provide custom mapping for missing attributes (optional ones can be skipped).")
-
-        user_mapping = {}
-        for attr, mandatory in missing:
-            col_name = st.selectbox(
-                f"Map column for **{attr}** ({'Mandatory' if mandatory else 'Optional'})",
-                options=[""] + list(df.columns),
-                key=attr,
-            )
-            if col_name:
-                user_mapping[col_name] = attr
-
-        if st.button("Apply Mapping"):
-            df, present, missing = analyze_gl(df, user_mapping=user_mapping)
-            st.success(" Mapping applied!")
-            st.write("Now Present:", present)
-            st.write("Still Missing:", missing)
-
-    if all(attr in df.columns for attr in ["debit_gbp", "credit_gbp"]):
-        st.subheader("Finance KPIs (Example)")
-        revenue = df["credit_gbp"].sum()
-        expense = df["debit_gbp"].sum()
-        profit = revenue - expense
-
-        st.metric("Revenue", f"£{revenue:,.2f}")
-        st.metric("Expense", f"£{expense:,.2f}")
-        st.metric("Profit", f"£{profit:,.2f}")
-
+    # Call analysis
+    df, kpis, summary_df = analyze_gl(df)
