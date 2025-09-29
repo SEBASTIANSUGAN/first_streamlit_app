@@ -51,7 +51,6 @@ ATTRIBUTE_DEPENDENCIES = {
 # ------------------------
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
-
     df_columns = df.columns.tolist()
     col_mapping = {}
     missing = []
@@ -69,26 +68,40 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
+def interactive_mapping(df, missing, user_mapping=None):
+    if user_mapping is None:
+        user_mapping = {}
+
+    st.subheader("Interactive Attribute Mapping")
+    validated_mapping = {}
+
+    for attr in missing:
+        selected_col = st.selectbox(
+            f"Map '{attr}' to a column (skip if not available)",
+            options=[""] + list(df.columns),
+            key=f"map_{attr}"
+        )
+
+        if selected_col != "":
+            if selected_col in df.columns:
+                st.success(f"✅ '{selected_col}' is a valid column for '{attr}'")
+                validated_mapping[attr] = selected_col
+            else:
+                st.error(f"❌ '{selected_col}' is not a valid column")
+        else:
+            st.info(f"Skipped mapping for '{attr}'")
+
+    user_mapping.update(validated_mapping)
+    return user_mapping
+
 def analyze_gl(df, user_mapping=None, show_plot=True):
     col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
 
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # Interactive mapping
     if mandatory_missing or optional_missing:
-        st.subheader("Interactive Attribute Mapping")
-        for attr in mandatory_missing + optional_missing:
-            col = st.selectbox(
-                f"Map '{attr}' to a column (skip if not available)",
-                options=[""] + list(df.columns),
-                key=attr
-            )
-            if col != "":
-                if user_mapping is None:
-                    user_mapping = {}
-                user_mapping[attr] = col
-
+        user_mapping = interactive_mapping(df, mandatory_missing + optional_missing, user_mapping)
         col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
         mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
@@ -116,8 +129,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     # ------------------------
     # KPI Calculation
     # ------------------------
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
-                             "description", "memo_description"]
+    possible_account_cols = ["account_name", "account", "gl_account", "account_code", "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
     possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
@@ -181,9 +193,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     }
 
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
-    summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
+    summary_df = summary_df.sort_values(by="net_amount", ascending=False)
 
-    
     st.subheader("Summary by Account Category")
     st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
 
@@ -219,9 +230,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     st.subheader("KPIs")
     for k, v in kpis.items():
         st.write(f"{k}: {v:,.2f}")
-
-    st.subheader("Summary by Account Category")
-    st.dataframe(summary_df)
 
     return df, kpis, summary_df
 
