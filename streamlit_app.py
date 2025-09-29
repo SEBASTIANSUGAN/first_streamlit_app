@@ -4,11 +4,6 @@ import pandas as pd
 
 import plotly.graph_objects as go
  
-# ------------------------
-
-# Configuration
-
-# ------------------------
 
 REQUIRED_ATTRIBUTES = {
 
@@ -86,12 +81,6 @@ ATTRIBUTE_DEPENDENCIES = {
 
 }
  
-# ------------------------
-
-# Functions
-
-# ------------------------
-
 def validate_and_map_attributes(df, user_mapping=None):
 
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
@@ -132,8 +121,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
  
-    # Interactive mapping
-
     if mandatory_missing or optional_missing:
 
         st.subheader("Interactive Attribute Mapping")
@@ -169,12 +156,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         return df, {}, None
  
     st.success("All required attributes found or mapped!")
- 
-    # ------------------------
-
-    # Attribute Impact
-
-    # ------------------------
 
     st.subheader("Attribute Impact on Metrics")
 
@@ -182,7 +163,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     for attr in REQUIRED_ATTRIBUTES.keys():
 
-        status = "✅ Present" if attr in present else "⚠️ Missing"
+        status = "Present" if attr in present else "Missing"
 
         affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
 
@@ -197,12 +178,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         })
 
     st.table(pd.DataFrame(attr_impact_data))
- 
-    # ------------------------
-
-    # KPI Calculation
-
-    # ------------------------
 
     possible_account_cols = ["account_name", "account", "gl_account", "account_code",
 
@@ -317,12 +292,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     st.subheader("Summary by Account Category")
 
     st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
- 
-    # ------------------------
-
-    # Plotly KPI Bar Chart
-
-    # ------------------------
 
     if show_plot:
 
@@ -330,7 +299,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
         fig = go.Figure()
 
-        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        colors = ["#3c92cf","#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
  
         for i, (metric, value) in enumerate(kpis.items()):
 
@@ -380,11 +349,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
  
     return df, kpis, summary_df
  
-# ------------------------
-
-# Streamlit App
-
-# ------------------------
 
 st.title("Interactive GL Analyzer")
  
@@ -400,7 +364,6 @@ if uploaded_file is not None:
 
         df_raw = pd.read_excel(uploaded_file, header=None)
  
-    # Detect header row
 
     header_row_idx = None
 
