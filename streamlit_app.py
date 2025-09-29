@@ -289,9 +289,9 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
  
     
 
-    st.subheader("Summary by Account Category")
+    # st.subheader("Summary by Account Category")
 
-    st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
+    # st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
 
     if show_plot:
 
