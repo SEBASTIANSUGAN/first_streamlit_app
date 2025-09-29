@@ -94,50 +94,7 @@ def interactive_mapping(df, missing, user_mapping=None):
     user_mapping.update(validated_mapping)
     return user_mapping
 
-def analyze_gl(df, user_mapping=None, show_plot=True):
-    col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-
-    mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
-    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
-
-    if mandatory_missing or optional_missing:
-        user_mapping = interactive_mapping(df, mandatory_missing + optional_missing, user_mapping)
-        col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-        mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
-
-    if mandatory_missing:
-        st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
-        return df, {}, None
-
-    st.success("All required attributes found or mapped!")
-
-    # ------------------------
-    # Attribute Impact
-    # ------------------------
-    st.subheader("Attribute Impact on Metrics")
-    attr_impact_data = []
-    for attr in REQUIRED_ATTRIBUTES.keys():
-        status = "✅ Present" if attr in present else "⚠️ Missing"
-        affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
-        attr_impact_data.append({
-            "Attribute": attr,
-            "Status": status,
-            "Affected Metrics": ", ".join(affected_metrics)
-        })
-    st.table(pd.DataFrame(attr_impact_data))
-
-    # ------------------------
-    # KPI Calculation
-    # ------------------------
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code", "description", "memo_description"]
-    account_col = next((c for c in possible_account_cols if c in df.columns), None)
-
-    possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
-    possible_credit_cols = ["credit", "credit_gbp", "credits", "cr"]
-
-    debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
-    credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
-
+def compute_kpis(df, account_col, debit_col, credit_col):
     df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
     df = df[df[account_col].notna()]
     df = df[df[debit_col].notna() | df[credit_col].notna()]
@@ -195,12 +152,50 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
     summary_df = summary_df.sort_values(by="net_amount", ascending=False)
 
+    return df, kpis, summary_df
+
+def analyze_gl(df, user_mapping=None, show_plot=True):
+    col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
+
+    mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
+    if mandatory_missing or optional_missing:
+        user_mapping = interactive_mapping(df, mandatory_missing + optional_missing, user_mapping)
+        col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
+        mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
+    if mandatory_missing:
+        st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
+        return df, {}, None
+
+    st.success("All required attributes found or mapped!")
+
+    # Attribute Impact Table
+    st.subheader("Attribute Impact on Metrics")
+    attr_impact_data = []
+    for attr in REQUIRED_ATTRIBUTES.keys():
+        status = "✅ Present" if attr in present else "⚠️ Missing"
+        affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
+        attr_impact_data.append({
+            "Attribute": attr,
+            "Status": status,
+            "Affected Metrics": ", ".join(affected_metrics)
+        })
+    st.table(pd.DataFrame(attr_impact_data))
+
+    # Dynamically get columns from mapping
+    account_col = col_mapping.get("memo_description", next((c for c in df.columns if "account" in c or "description" in c), None))
+    debit_col = col_mapping.get("debit_gbp", next((c for c in df.columns if "debit" in c), None))
+    credit_col = col_mapping.get("credit_gbp", next((c for c in df.columns if "credit" in c), None))
+
+    df, kpis, summary_df = compute_kpis(df, account_col, debit_col, credit_col)
+
+    # Summary Table
     st.subheader("Summary by Account Category")
     st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
 
-    # ------------------------
     # Plotly KPI Bar Chart
-    # ------------------------
     if show_plot:
         st.subheader("Financial Metrics Visualization")
         fig = go.Figure()
