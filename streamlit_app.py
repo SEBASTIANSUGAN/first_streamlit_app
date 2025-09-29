@@ -47,11 +47,10 @@ ATTRIBUTE_DEPENDENCIES = {
 }
 
 # ------------------------
-# Functions
+# Validation + Mapping
 # ------------------------
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
-
     df_columns = df.columns.tolist()
     col_mapping = {}
     missing = []
@@ -69,15 +68,16 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
-
+# ------------------------
+# GL Analyzer
+# ------------------------
 def analyze_gl(df, user_mapping=None, show_plot=True):
     col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # ✅ Side by side layout
-    col1, col2 = st.columns([1, 2])
+    # ✅ Side by side layout with spacing
+    col1, col2 = st.columns([1, 2], gap="large")
 
     with col1:
         if mandatory_missing or optional_missing:
@@ -106,18 +106,18 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.subheader("Attribute Impact on Metrics")
         attr_impact_data = []
         for attr in REQUIRED_ATTRIBUTES.keys():
-            status = "Present" if attr in present else "Missing"
+            status = "✅ Present" if attr in present else "⚠️ Missing"
             affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
             attr_impact_data.append({
                 "Attribute": attr,
                 "Status": status,
                 "Affected Metrics": ", ".join(affected_metrics)
             })
-        st.table(pd.DataFrame(attr_impact_data))
+        st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
 
-    # ------------------------
-    # Continue analysis
-    # ------------------------
+    # ========================
+    # Continue with KPI calculation
+    # ========================
     possible_account_cols = ["account_name", "account", "gl_account", "account_code",
                              "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
@@ -185,10 +185,11 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
     summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
 
+    # Visualization
     if show_plot:
         st.subheader("Financial Metrics Visualization")
         fig = go.Figure()
-        colors = ["#3c92cf","#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        colors = ["#3c92cf", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
 
         for i, (metric, value) in enumerate(kpis.items()):
             fig.add_trace(go.Bar(
@@ -208,17 +209,18 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
             paper_bgcolor="rgba(0,0,0,0)",
             showlegend=False
         )
+
         st.plotly_chart(fig, use_container_width=True)
 
+    # KPI values
     st.subheader("KPIs")
     for k, v in kpis.items():
         st.write(f"{k}: {v:,.2f}")
 
     st.subheader("Summary by Account Category")
-    st.dataframe(summary_df)
+    st.dataframe(summary_df, use_container_width=True)
 
     return df, kpis, summary_df
-
 
 # ------------------------
 # Streamlit App
