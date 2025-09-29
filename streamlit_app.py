@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 # ------------------------
 # Configuration
@@ -70,13 +70,12 @@ def validate_and_map_attributes(df, user_mapping=None):
     return col_mapping, missing, present
 
 def analyze_gl(df, user_mapping=None, show_plot=True):
-    # Map attributes
     col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
 
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # Interactive mapping for missing attributes
+    # Interactive mapping
     if mandatory_missing or optional_missing:
         st.subheader("Interactive Attribute Mapping")
         for attr in mandatory_missing + optional_missing:
@@ -90,7 +89,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
                     user_mapping = {}
                 user_mapping[attr] = col
 
-        # Re-validate after user mapping
         col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
         mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
@@ -101,7 +99,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     st.success("All required attributes found or mapped!")
 
     # ------------------------
-    # Display attribute impact
+    # Attribute Impact
     # ------------------------
     st.subheader("Attribute Impact on Metrics")
     attr_impact_data = []
@@ -133,8 +131,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     df = df[df[debit_col].notna() | df[credit_col].notna()]
 
     for col in [debit_col, credit_col]:
-        df[col] = (df[col]
-                   .astype(str)
+        df[col] = (df[col].astype(str)
                    .str.replace(",", "")
                    .str.replace(" ", "")
                    .replace("", "0")
@@ -161,7 +158,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     df["account_category"] = df[account_col].apply(classify_account)
 
-    # KPIs
     total = df["net_amount"].sum()
     revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
     cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
@@ -170,57 +166,55 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     other_expense = df[df["account_category"] == "Other Expense"]["net_amount"].sum()
 
     gross_profit = revenue - cogs
-    gross_margin_pct = (gross_profit / revenue * 100) if revenue != 0 else 0
     ebitda = gross_profit - opex
-    ebitda_margin_pct = (ebitda / revenue * 100) if revenue != 0 else 0
     net_profit = ebitda + other_income - other_expense
-    net_margin_pct = (net_profit / revenue * 100) if revenue != 0 else 0
 
     kpis = {
-        "Total": total,
         "Revenue": revenue,
         "COGS": cogs,
-        "Gross Profit": gross_profit,
-        "Gross Margin %": gross_margin_pct,
         "OPEX": opex,
+        "Gross Profit": gross_profit,
         "EBITDA": ebitda,
-        "EBITDA Margin %": ebitda_margin_pct,
         "Other Income": other_income,
         "Other Expense": other_expense,
-        "Net Profit": net_profit,
-        "Net Margin %": net_margin_pct
+        "Net Profit": net_profit
     }
 
-    # Summary table
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
     summary_df = summary_df.sort_values(by="net_amount", ascending=False)
 
     # ------------------------
-    # KPI Plots
+    # Plotly KPI Bar Chart
     # ------------------------
     if show_plot:
-        st.subheader("Financial Metrics")
-        metrics = ["Revenue", "COGS", "OPEX", "Gross Profit", "Net Profit"]
-        values = [revenue, cogs, opex, gross_profit, net_profit]
+        st.subheader("Financial Metrics Visualization")
+        fig = go.Figure()
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
 
-        fig, ax = plt.subplots(figsize=(8, 5))
-        bars = ax.bar(metrics, values, color=["green", "red", "blue", "orange", "purple"])
-        ax.set_ylabel("Amount")
-        ax.grid(axis="y", linestyle="--", alpha=0.7)
+        for i, (metric, value) in enumerate(kpis.items()):
+            fig.add_trace(go.Bar(
+                x=[metric],
+                y=[value],
+                text=f"{value:,.0f}",
+                textposition='auto',
+                marker_color=colors[i % len(colors)]
+            ))
 
-        for bar in bars:
-            yval = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2, yval, f"{yval:,.0f}",
-                     ha='center', va='bottom')
+        fig.update_layout(
+            title="Financial KPIs",
+            yaxis_title="Amount (£)",
+            xaxis_title="Metrics",
+            template="plotly_white",
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            showlegend=False
+        )
 
-        st.pyplot(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("KPIs")
     for k, v in kpis.items():
-        if "%" in k:
-            st.write(f"{k}: {v:.2f}%")
-        else:
-            st.write(f"{k}: {v:,.2f}")
+        st.write(f"{k}: {v:,.2f}")
 
     st.subheader("Summary by Account Category")
     st.dataframe(summary_df)
@@ -256,5 +250,4 @@ if uploaded_file is not None:
             df = pd.read_excel(uploaded_file, header=header_row_idx)
         df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
 
-        # Run analysis
         analyze_gl(df)
