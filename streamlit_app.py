@@ -181,7 +181,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     }
 
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
-    summary_df = summary_df.sort_values(by="net_amount", ascending=False)
+    summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
+
     
     st.subheader("Summary by Account Category")
     st.dataframe(summary_df.style.format({"net_amount": "{:,.2f}"}))
