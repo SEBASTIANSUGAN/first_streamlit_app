@@ -265,8 +265,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         bs_balance=("net_amount", "sum")
     ).reset_index()
 
-    st.subheader("Balance Sheet")
-    st.dataframe(bs_df, use_container_width=True)
+    # st.subheader("Balance Sheet")
+    # st.dataframe(bs_df, use_container_width=True)
 
     return df, kpis, summary_df
 
