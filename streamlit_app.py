@@ -257,8 +257,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         pl_amount=("net_amount", "sum")
     ).reset_index()
 
-    st.subheader("Profit & Loss")
-    st.dataframe(pl_df, use_container_width=True)
+    # st.subheader("Profit & Loss")
+    # st.dataframe(pl_df, use_container_width=True)
 
     # Balance Sheet
     bs_df = df.groupby("account_category").agg(
