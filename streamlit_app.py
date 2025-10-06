@@ -239,8 +239,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
             subset = df[df["posted_dt"] >= start_date]
             trend_metrics[f"L{window}_total"] = subset["net_amount"].sum()
 
-    st.subheader("Trend Metrics (L7, L30, L90)")
-    st.dataframe(pd.DataFrame([trend_metrics]), use_container_width=True)
+    # st.subheader("Trend Metrics (L7, L30, L90)")
+    # st.dataframe(pd.DataFrame([trend_metrics]), use_container_width=True)
 
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
