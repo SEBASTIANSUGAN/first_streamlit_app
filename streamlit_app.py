@@ -30,17 +30,17 @@ CUSTOM_MAPPING = {
 }
 
 ATTRIBUTE_DEPENDENCIES = {
-    "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "credit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "balance_gbp": ["Net Profit"],
+    "debit_gbp": ["Trial Balance", "Net Profit"],
+    "credit_gbp": ["Trial Balance", "Net Profit"],
+    "balance_gbp": ["Balance Sheet", "Net Profit"],
     "txn_amt": ["Revenue", "COGS", "OPEX"],
-    "curr": ["Revenue", "COGS", "OPEX"],
-    "jnl": ["OPEX", "COGS"],
-    "posted_dt": ["Revenue trends", "Period-based KPIs"],
-    "doc_dt": ["Revenue trends", "Period-based KPIs"],
-    "doc": ["Audit/Traceability"],
+    "curr": ["Currency conversion", "Revenue", "COGS", "OPEX"],
+    "jnl": ["Journal classification", "OPEX", "COGS"],
+    "posted_dt": ["Trend metrics", "Period-based KPIs"],
+    "doc_dt": ["Trend metrics", "Period-based KPIs"],
+    "doc": ["Audit / Traceability"],
     "memo_description": ["OPEX Classification", "COGS Classification"],
-    "department_name": ["OPEX Classification"],
+    "department_name": ["Department-level P&L and OPEX"],
     "supplier_name": ["COGS Classification"],
     "item_name": ["COGS Classification"],
     "customer_name": ["Revenue Classification"]
@@ -74,13 +74,22 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # Side by side layout
     col1, col2 = st.columns([1, 2], gap="large")
 
+    # ------------------------
+    # Attribute Mapping with Tooltip
+    # ------------------------
     with col1:
         if mandatory_missing or optional_missing:
             st.subheader("Interactive Attribute Mapping")
             for attr in mandatory_missing + optional_missing:
+                # Add tooltip with metric dependency
+                metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
+                tooltip = f"Needed for: {', '.join(metrics)}"
+                st.markdown(
+                    f"<b>{attr}</b> <span style='color:gray;' title='{tooltip}'>🛈</span>",
+                    unsafe_allow_html=True
+                )
                 col = st.selectbox(
                     f"Map '{attr}' to a column (skip if not available)",
                     options=[""] + list(df.columns),
@@ -100,6 +109,9 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
         st.success("All required attributes found or mapped!")
 
+    # ------------------------
+    # Attribute Impact Table
+    # ------------------------
     with col2:
         st.subheader("Attribute Impact on Metrics")
         attr_impact_data = []
@@ -113,9 +125,9 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
             })
         st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
 
-    # ========================
-    # Continue with KPI calculation
-    # ========================
+    # ------------------------
+    # KPI Calculation
+    # ------------------------
     possible_account_cols = ["account_name", "account", "gl_account", "account_code",
                              "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
@@ -158,7 +170,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     df["account_category"] = df[account_col].apply(classify_account)
 
-    total = df["net_amount"].sum()
     revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
     cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
     opex = df[df["account_category"] == "OPEX"]["net_amount"].sum()
@@ -180,67 +191,20 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         "Net Profit": net_profit
     }
 
-    summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
-    summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
-
     # Visualization
     if show_plot:
         st.subheader("Financial Metrics Visualization")
         fig = go.Figure()
-        colors = ["#3c92cf", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
-
-        for i, (metric, value) in enumerate(kpis.items()):
-            fig.add_trace(go.Bar(
-                x=[metric],
-                y=[value],
-                text=f"{value:,.0f}",
-                textposition='auto',
-                marker_color=colors[i % len(colors)]
-            ))
-
+        for metric, value in kpis.items():
+            fig.add_trace(go.Bar(x=[metric], y=[value], text=f"{value:,.0f}", textposition='auto'))
         fig.update_layout(
             title="Financial KPIs",
             yaxis_title="Amount (£)",
             xaxis_title="Metrics",
             template="plotly_white",
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
             showlegend=False
         )
-
         st.plotly_chart(fig, use_container_width=True)
-
-    # ========================
-    # KPI values + Summary side by side
-    # ========================
-    st.markdown("---")
-    col3, col4 = st.columns([1, 1], gap="large")
-
-    with col3:
-        st.subheader("KPIs")
-        kpi_df = pd.DataFrame(list(kpis.items()), columns=["Metric", "Value"])
-        kpi_df["Value"] = kpi_df["Value"].apply(lambda x: f"{x:,.2f}")
-        st.dataframe(kpi_df, use_container_width=True)
-
-    with col4:
-        st.subheader("Summary by Account Category")
-        st.dataframe(summary_df, use_container_width=True)
-
-    # ------------------------
-    # Additional Financial Metrics
-    # ------------------------
-    # Trend Metrics
-    trend_metrics = {}
-    if "posted_dt" in df.columns:
-        df["posted_dt"] = pd.to_datetime(df["posted_dt"])
-        ref_date = df["posted_dt"].max()
-        for window in [7, 30, 90]:
-            start_date = ref_date - pd.Timedelta(days=window)
-            subset = df[df["posted_dt"] >= start_date]
-            trend_metrics[f"L{window}_total"] = subset["net_amount"].sum()
-
-    # st.subheader("Trend Metrics (L7, L30, L90)")
-    # st.dataframe(pd.DataFrame([trend_metrics]), use_container_width=True)
 
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
@@ -252,30 +216,30 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     st.subheader("Trial Balance")
     st.dataframe(tb_df, use_container_width=True)
 
-    # Profit & Loss
-    pl_df = df.groupby("account_category").agg(
-        pl_amount=("net_amount", "sum")
-    ).reset_index()
+    return df, kpis
 
-    # st.subheader("Profit & Loss")
-    # st.dataframe(pl_df, use_container_width=True)
-
-    # Balance Sheet
-    bs_df = df.groupby("account_category").agg(
-        bs_balance=("net_amount", "sum")
-    ).reset_index()
-
-    # st.subheader("Balance Sheet")
-    # st.dataframe(bs_df, use_container_width=True)
-
-    return df, kpis, summary_df
 
 # ------------------------
 # Streamlit App
 # ------------------------
-st.title("Interactive GL Analyzer")
+st.title("📘 Interactive General Ledger Analyzer")
 
 uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx", "csv"])
+
+
+def detect_header_row(raw_df):
+    sample_gl_headers = [
+        "posted_dt", "posting date", "doc_dt", "document date",
+        "doc", "document number", "memo_description", "description",
+        "department_name", "department", "supplier_name", "vendor",
+        "account_name", "account", "debit", "credit", "currency", "amount"
+    ]
+    for i, row in raw_df.iterrows():
+        row_str = " ".join([str(x).lower().strip() for x in row.tolist() if pd.notna(x)])
+        if sum(1 for keyword in sample_gl_headers if keyword in row_str) >= 2:
+            return i
+    raise ValueError("❌ Could not find header row — please verify that your GL file contains recognizable columns like Debit, Credit, or Date.")
+
 
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
@@ -283,26 +247,11 @@ if uploaded_file is not None:
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
 
-    header_row_idx = None
-    for i, row in df_raw.iterrows():
-        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
-        if "debit" in row_str and "credit" in row_str:
-            header_row_idx = i
-            break
-
-    if header_row_idx is None:
-        st.error("Could not detect header row with Debit/Credit columns")
-    else:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file, header=header_row_idx)
-        else:
-            df = pd.read_excel(uploaded_file, header=header_row_idx)
-
+    try:
+        header_row_idx = detect_header_row(df_raw)
+        df = (pd.read_csv(uploaded_file, header=header_row_idx) if uploaded_file.name.endswith(".csv")
+              else pd.read_excel(uploaded_file, header=header_row_idx))
         df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
         analyze_gl(df)
-with st.expander("ℹ️ Help: Why validate attributes?"):
-    st.write("""
-    - This tool ensures all required attributes are available for FP&A calculations like Trial Balance and Net Profit.
-    - Missing attributes can lead to incomplete or inaccurate financial metrics.
-    - Hover over each attribute to see why it’s important.
-    """)
+    except Exception as e:
+        st.error(str(e))
