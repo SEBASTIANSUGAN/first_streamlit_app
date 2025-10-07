@@ -30,9 +30,9 @@ CUSTOM_MAPPING = {
 }
 
 ATTRIBUTE_DEPENDENCIES = {
-    "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "credit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "balance_gbp": ["Net Profit"],
+    "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit", "Trial Balance"],
+    "credit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit", "Trial Balance"],
+    "balance_gbp": ["Net Profit", "Balance Sheet"],
     "txn_amt": ["Revenue", "COGS", "OPEX"],
     "curr": ["Revenue", "COGS", "OPEX"],
     "jnl": ["OPEX", "COGS"],
@@ -66,6 +66,7 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
+
 # ------------------------
 # GL Analyzer
 # ------------------------
@@ -74,12 +75,13 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
-    # Side by side layout
+    # Side-by-side layout
     col1, col2 = st.columns([1, 2], gap="large")
 
     with col1:
         if mandatory_missing or optional_missing:
             st.subheader("Interactive Attribute Mapping")
+
             for attr in mandatory_missing + optional_missing:
                 col = st.selectbox(
                     f"Map '{attr}' to a column (skip if not available)",
@@ -93,6 +95,19 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
             col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
             mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
+            optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
+
+            # --- NEW SECTION: Missing Attribute Impact ---
+            if missing:
+                st.warning("Some attributes are missing. See their impact below:")
+                impact_data = []
+                for attr in missing:
+                    affected = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
+                    impact_data.append({
+                        "Missing Attribute": attr,
+                        "Affected Metrics": ", ".join(affected)
+                    })
+                st.dataframe(pd.DataFrame(impact_data), use_container_width=True)
 
         if mandatory_missing:
             st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
@@ -114,10 +129,9 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
 
     # ========================
-    # Continue with KPI calculation
+    # KPI Calculation
     # ========================
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
-                             "description", "memo_description"]
+    possible_account_cols = ["account_name", "account", "gl_account", "account_code", "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
     possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
@@ -210,9 +224,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # ========================
-    # KPI values + Summary side by side
-    # ========================
+    # KPI Table + Summary
     st.markdown("---")
     col3, col4 = st.columns([1, 1], gap="large")
 
@@ -239,9 +251,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
             subset = df[df["posted_dt"] >= start_date]
             trend_metrics[f"L{window}_total"] = subset["net_amount"].sum()
 
-    # st.subheader("Trend Metrics (L7, L30, L90)")
-    # st.dataframe(pd.DataFrame([trend_metrics]), use_container_width=True)
-
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
         total_debit=("debit_gbp", "sum"),
@@ -257,18 +266,13 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         pl_amount=("net_amount", "sum")
     ).reset_index()
 
-    # st.subheader("Profit & Loss")
-    # st.dataframe(pl_df, use_container_width=True)
-
     # Balance Sheet
     bs_df = df.groupby("account_category").agg(
         bs_balance=("net_amount", "sum")
     ).reset_index()
 
-    # st.subheader("Balance Sheet")
-    # st.dataframe(bs_df, use_container_width=True)
-
     return df, kpis, summary_df
+
 
 # ------------------------
 # Streamlit App
