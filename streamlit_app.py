@@ -300,3 +300,9 @@ if uploaded_file is not None:
 
         df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
         analyze_gl(df)
+with st.expander("ℹ️ Help: Why validate attributes?"):
+    st.write("""
+    - This tool ensures all required attributes are available for FP&A calculations like Trial Balance and Net Profit.
+    - Missing attributes can lead to incomplete or inaccurate financial metrics.
+    - Hover over each attribute to see why it’s important.
+    """)
