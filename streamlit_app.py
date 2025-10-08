@@ -230,8 +230,25 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     # ========================
     # Continue with KPI calculation
     # ========================
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
-                             "description", "memo_description"]
+    possible_account_cols = [
+    # General Account Names
+    "account", "account_name", "account_description", "gl_account", "gl_account_name",
+    "gl_account_description", "ledger_account", "ledger_account_name", "main_account",
+    "main_account_name", "sub_account", "sub_account_name", "account_code",
+    "account_no", "account_number", "account_id", "chart_of_account", "coa_code",
+    "coa_name", "coa_description", "general_ledger_account", "gl_code", "gl_name",
+
+    # Description / Memo Variations
+    "description", "line_description", "transaction_description", "details",
+    "memo", "memo_description", "narration", "remarks", "comment", "comments",
+    "text", "reference_description", "summary_description", "explanation",
+
+    # Other Potential Identifiers
+    "account_title", "account_label", "account_ref", "account_reference",
+    "posting_account", "posting_name", "reporting_account", "revenue_account",
+    "expense_account", "balance_sheet_account"
+]
+
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
     possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
