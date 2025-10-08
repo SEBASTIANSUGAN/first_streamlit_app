@@ -66,6 +66,7 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     return col_mapping, missing, present
 
+
 # ------------------------
 # GL Analyzer
 # ------------------------
@@ -210,9 +211,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # ========================
-    # KPI values + Summary side by side
-    # ========================
     st.markdown("---")
     col3, col4 = st.columns([1, 1], gap="large")
 
@@ -226,22 +224,6 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.subheader("Summary by Account Category")
         st.dataframe(summary_df, use_container_width=True)
 
-    # ------------------------
-    # Additional Financial Metrics
-    # ------------------------
-    # Trend Metrics
-    trend_metrics = {}
-    if "posted_dt" in df.columns:
-        df["posted_dt"] = pd.to_datetime(df["posted_dt"])
-        ref_date = df["posted_dt"].max()
-        for window in [7, 30, 90]:
-            start_date = ref_date - pd.Timedelta(days=window)
-            subset = df[df["posted_dt"] >= start_date]
-            trend_metrics[f"L{window}_total"] = subset["net_amount"].sum()
-
-    # st.subheader("Trend Metrics (L7, L30, L90)")
-    # st.dataframe(pd.DataFrame([trend_metrics]), use_container_width=True)
-
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
         total_debit=("debit_gbp", "sum"),
@@ -252,23 +234,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     st.subheader("Trial Balance")
     st.dataframe(tb_df, use_container_width=True)
 
-    # Profit & Loss
-    pl_df = df.groupby("account_category").agg(
-        pl_amount=("net_amount", "sum")
-    ).reset_index()
-
-    # st.subheader("Profit & Loss")
-    # st.dataframe(pl_df, use_container_width=True)
-
-    # Balance Sheet
-    bs_df = df.groupby("account_category").agg(
-        bs_balance=("net_amount", "sum")
-    ).reset_index()
-
-    # st.subheader("Balance Sheet")
-    # st.dataframe(bs_df, use_container_width=True)
-
     return df, kpis, summary_df
+
 
 # ------------------------
 # Streamlit App
@@ -277,25 +244,35 @@ st.title("Interactive GL Analyzer")
 
 uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx", "csv"])
 
-
-
-
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
 
+    # ------------------------
+    # Enhanced Header Row Detection
+    # ------------------------
+    header_keywords = [
+        "debit", "credit", "amount", "balance",
+        "gl_date", "gl_account", "account", "account_name",
+        "description", "department", "product", "customer",
+        "transaction_type", "memo"
+    ]
+
     header_row_idx = None
+
     for i, row in df_raw.iterrows():
         row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
-        if "debit" in row_str and "credit" in row_str:
+        match_count = sum(1 for kw in header_keywords if kw in row_str)
+        if match_count >= 3:
             header_row_idx = i
             break
 
     if header_row_idx is None:
-        st.error("Could not detect header row with Debit/Credit columns")
+        st.error("❌ Could not detect a valid header row. Please ensure your file contains Debit/Credit or standard GL columns.")
     else:
+        st.success(f"✅ Header row detected at line {header_row_idx + 1}")
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file, header=header_row_idx)
         else:
