@@ -254,11 +254,53 @@ if uploaded_file is not None:
     # Enhanced Header Row Detection
     # ------------------------
     header_keywords = [
-        "debit", "credit", "amount", "balance",
-        "gl_date", "gl_account", "account", "account_name",
-        "description", "department", "product", "customer",
-        "transaction_type", "memo"
-    ]
+    # Amounts
+    "debit", "credit", "amount", "balance", "debit_amount", "credit_amount", 
+    "net_amount", "total", "transaction_amount", "value", "dr", "cr", 
+    "debit_gbp", "credit_gbp", "amount_gbp",
+
+    # Dates
+    "gl_date", "posted_date", "posting_date", "transaction_date", "doc_date", 
+    "journal_date", "date", "entry_date", "value_date", "fiscal_period", 
+    "period", "fiscal_year", "year", "month",
+
+    # Accounts
+    "gl_account", "account", "account_number", "account_no", "account_name", 
+    "main_account", "ledger_account", "account_code", "coa_code", "coa_name", 
+    "chart_of_account",
+
+    # Document / Reference
+    "doc_no", "document_no", "document_number", "voucher_no", "journal_id", 
+    "journal_no", "reference", "reference_no", "ref_no", "batch_no", 
+    "entry_id", "transaction_id",
+
+    # Description / Memo
+    "description", "memo", "memo_description", "narration", "remarks", 
+    "comments", "details", "line_description", "transaction_description",
+
+    # Department / Organization
+    "department", "department_name", "cost_center", "costcentre", "division", 
+    "business_unit", "unit", "entity", "company", "company_name", "location", 
+    "region", "branch",
+
+    # People / Vendor / Customer
+    "vendor", "vendor_name", "supplier", "supplier_name", "customer", 
+    "customer_name", "employee", "employee_name", "partner", "client",
+
+    # Product / Item / Project
+    "product", "product_name", "item", "item_name", "project", "project_name", 
+    "job", "job_name", "work_order", "work_order_no",
+
+    # Transaction Type / Category
+    "transaction_type", "transaction_category", "entry_type", "journal_type", 
+    "posting_type", "record_type", "gl_type", "account_type", "source", 
+    "source_system", "module",
+
+    # Miscellaneous
+    "currency", "currency_code", "fx_rate", "exchange_rate", "status", "flag", 
+    "approved_by", "created_by", "updated_by", "timestamp"
+]
+
 
     header_row_idx = None
 
