@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import difflib
 
 # ------------------------
 # Configurations
@@ -105,7 +104,6 @@ REQUIRED_ATTRIBUTES = {
         ]
     }
 }
-
 CUSTOM_MAPPING = {
     "memo/description": "memo_description",
     "debit_(gbp)": "debit_gbp",
@@ -135,39 +133,26 @@ ATTRIBUTE_DEPENDENCIES = {
 # ------------------------
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
-    df_columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+    df_columns = [c.lower().strip() for c in df.columns]
     col_mapping, missing, present = {}, [], []
 
     for attr, props in REQUIRED_ATTRIBUTES.items():
         found = None
 
-        # Direct match
+        # 1️⃣ Direct match
         if attr in df_columns:
             found = attr
 
-        # User-provided mapping
+        # 2️⃣ User-provided mapping
         elif user_mapping and attr in user_mapping and user_mapping[attr].lower() in df_columns:
             found = user_mapping[attr].lower()
 
-        # Check all possible_names
+        # 3️⃣ Match from possible names list
         else:
-            possible_names = [alt.lower().replace(" ", "_") for alt in props.get("possible_names", [])]
-            for alt in possible_names:
-                if alt in df_columns:
-                    found = alt
+            for alt in props.get("possible_names", []):
+                if alt.lower() in df_columns:
+                    found = alt.lower()
                     break
-
-        # Fuzzy match
-        if not found:
-            closest = difflib.get_close_matches(attr, df_columns, n=1, cutoff=0.8)
-            if closest:
-                found = closest[0]
-            else:
-                for alt in props.get("possible_names", []):
-                    close_alt = difflib.get_close_matches(alt.lower(), df_columns, n=1, cutoff=0.8)
-                    if close_alt:
-                        found = close_alt[0]
-                        break
 
         if found:
             col_mapping[attr] = found
@@ -185,6 +170,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
     optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
+    # Side by side layout
     col1, col2 = st.columns([1, 2], gap="large")
 
     with col1:
@@ -224,63 +210,31 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
 
     # ========================
-    # KPI calculation
+    # Continue with KPI calculation
     # ========================
-    possible_account_cols = [
-        "account", "account_name", "account_description", "gl_account", "gl_account_name",
-        "gl_account_description", "ledger_account", "ledger_account_name", "main_account",
-        "main_account_name", "sub_account", "sub_account_name", "account_code",
-        "account_no", "account_number", "account_id", "chart_of_account", "coa_code",
-        "coa_name", "coa_description", "general_ledger_account", "gl_code", "gl_name",
-        "account_title", "account_label", "account_ref", "account_reference",
-        "posting_account", "posting_name", "reporting_account", "revenue_account",
-        "expense_account", "balance_sheet_account"
-    ]
-
+    possible_account_cols = ["account_name", "account", "gl_account", "account_code",
+                             "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
     possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
     possible_credit_cols = ["credit", "credit_gbp", "credits", "cr"]
-    possible_amount_cols = ["amount", "txn_amt", "transaction_amount", "value", "net_amount"]
 
     debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
     credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
-    amount_col = next((c for c in possible_amount_cols if c in df.columns), None)
 
     df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
     df = df[df[account_col].notna()]
+    df = df[df[debit_col].notna() | df[credit_col].notna()]
 
-    # If debit/credit columns are missing, use amount column
-    if debit_col is None and credit_col is None:
-        if amount_col is None:
-            st.error("❌ Could not find debit, credit, or amount column for calculation.")
-            return df, {}, None
-        else:
-            st.warning(f"⚠️ Using '{amount_col}' as transaction amount since Debit/Credit not found.")
-            df[amount_col] = (
-                df[amount_col].astype(str)
-                .str.replace(",", "")
-                .str.replace(" ", "")
-                .replace("", "0")
-                .astype(float)
-            )
-            df["net_amount"] = df[amount_col]
-    else:
-        for col in [debit_col, credit_col]:
-            if col and col in df.columns:
-                df[col] = (
-                    df[col].astype(str)
-                    .str.replace(",", "")
-                    .str.replace(" ", "")
-                    .replace("", "0")
-                    .astype(float)
-                )
-        df["net_amount"] = (
-            (df[debit_col].fillna(0) if debit_col else 0)
-            - (df[credit_col].fillna(0) if credit_col else 0)
-        )
+    for col in [debit_col, credit_col]:
+        df[col] = (df[col].astype(str)
+                   .str.replace(",", "")
+                   .str.replace(" ", "")
+                   .replace("", "0")
+                   .astype(float))
 
-    # Account Classification
+    df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
+
     account_mapping = {
         "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
         "COGS": ["cogs", "cost", "goods", "inventory", "hosting", "support"],
@@ -377,6 +331,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     return df, kpis, summary_df
 
+
 # ------------------------
 # Streamlit App
 # ------------------------
@@ -390,37 +345,60 @@ if uploaded_file is not None:
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
 
+    # ------------------------
     # Enhanced Header Row Detection
+    # ------------------------
     header_keywords = [
-        "debit", "credit", "amount", "balance", "debit_amount", "credit_amount", 
-        "net_amount", "total", "transaction_amount", "value", "dr", "cr", 
-        "debit_gbp", "credit_gbp", "amount_gbp",
-        "gl_date", "posted_date", "posting_date", "transaction_date", "doc_date", 
-        "journal_date", "date", "entry_date", "value_date", "fiscal_period", 
-        "period", "fiscal_year", "year", "month",
-        "gl_account", "account", "account_number", "account_no", "account_name", 
-        "main_account", "ledger_account", "account_code", "coa_code", "coa_name", 
-        "chart_of_account",
-        "doc_no", "document_no", "document_number", "voucher_no", "journal_id", 
-        "journal_no", "reference", "reference_no", "ref_no", "batch_no", 
-        "entry_id", "transaction_id",
-        "description", "memo", "memo_description", "narration", "remarks", 
-        "comments", "details", "line_description", "transaction_description",
-        "department", "department_name", "cost_center", "costcentre", "division", 
-        "business_unit", "unit", "entity", "company", "company_name", "location", 
-        "region", "branch",
-        "vendor", "vendor_name", "supplier", "supplier_name", "customer", 
-        "customer_name", "employee", "employee_name", "partner", "client",
-        "product", "product_name", "item", "item_name", "project", "project_name", 
-        "job", "job_name", "work_order", "work_order_no",
-        "transaction_type", "transaction_category", "entry_type", "journal_type", 
-        "posting_type", "record_type", "gl_type", "account_type", "source", 
-        "source_system", "module",
-        "currency", "currency_code", "fx_rate", "exchange_rate", "status", "flag", 
-        "approved_by", "created_by", "updated_by", "timestamp"
-    ]
+    # Amounts
+    "debit", "credit", "amount", "balance", "debit_amount", "credit_amount", 
+    "net_amount", "total", "transaction_amount", "value", "dr", "cr", 
+    "debit_gbp", "credit_gbp", "amount_gbp",
+
+    # Dates
+    "gl_date", "posted_date", "posting_date", "transaction_date", "doc_date", 
+    "journal_date", "date", "entry_date", "value_date", "fiscal_period", 
+    "period", "fiscal_year", "year", "month",
+
+    # Accounts
+    "gl_account", "account", "account_number", "account_no", "account_name", 
+    "main_account", "ledger_account", "account_code", "coa_code", "coa_name", 
+    "chart_of_account",
+
+    # Document / Reference
+    "doc_no", "document_no", "document_number", "voucher_no", "journal_id", 
+    "journal_no", "reference", "reference_no", "ref_no", "batch_no", 
+    "entry_id", "transaction_id",
+
+    # Description / Memo
+    "description", "memo", "memo_description", "narration", "remarks", 
+    "comments", "details", "line_description", "transaction_description",
+
+    # Department / Organization
+    "department", "department_name", "cost_center", "costcentre", "division", 
+    "business_unit", "unit", "entity", "company", "company_name", "location", 
+    "region", "branch",
+
+    # People / Vendor / Customer
+    "vendor", "vendor_name", "supplier", "supplier_name", "customer", 
+    "customer_name", "employee", "employee_name", "partner", "client",
+
+    # Product / Item / Project
+    "product", "product_name", "item", "item_name", "project", "project_name", 
+    "job", "job_name", "work_order", "work_order_no",
+
+    # Transaction Type / Category
+    "transaction_type", "transaction_category", "entry_type", "journal_type", 
+    "posting_type", "record_type", "gl_type", "account_type", "source", 
+    "source_system", "module",
+
+    # Miscellaneous
+    "currency", "currency_code", "fx_rate", "exchange_rate", "status", "flag", 
+    "approved_by", "created_by", "updated_by", "timestamp"
+]
+
 
     header_row_idx = None
+
     for i, row in df_raw.iterrows():
         row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
         match_count = sum(1 for kw in header_keywords if kw in row_str)
