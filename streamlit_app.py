@@ -7,23 +7,111 @@ import difflib
 # Configurations
 # ------------------------
 REQUIRED_ATTRIBUTES = {
-    "posted_dt": {"mandatory": False, "possible_names": ["posted_dt", "posted_date", "posting_date", "gl_date", "entry_date", "transaction_date", "journal_date", "posting_dt", "value_date", "period_date"]},
-    "doc_dt": {"mandatory": False, "possible_names": ["doc_dt", "document_date", "doc_date", "invoice_date", "bill_date", "reference_date", "voucher_date"]},
-    "doc": {"mandatory": False, "possible_names": ["doc", "document_no", "document_number", "voucher_no", "journal_no", "reference_no", "ref_no", "entry_no", "transaction_id", "batch_no"]},
-    "memo_description": {"mandatory": False, "possible_names": ["memo_description", "description", "memo", "narration", "remarks", "line_description", "comments", "details", "gl_description"]},
-    "department_name": {"mandatory": False, "possible_names": ["department_name", "department", "cost_center", "costcentre", "division", "business_unit", "unit", "team", "function"]},
-    "supplier_name": {"mandatory": False, "possible_names": ["supplier_name", "supplier", "vendor_name", "vendor", "partner", "payee", "creditor", "beneficiary"]},
-    "item_name": {"mandatory": False, "possible_names": ["item_name", "item", "product", "product_name", "sku", "material", "material_name", "asset_name"]},
-    "customer_name": {"mandatory": False, "possible_names": ["customer_name", "customer", "client", "buyer", "account_name", "receiver", "payer"]},
-    "jnl": {"mandatory": False, "possible_names": ["jnl", "journal_type", "entry_type", "transaction_type", "record_type", "posting_type", "gl_type"]},
-    "curr": {"mandatory": False, "possible_names": ["curr", "currency", "currency_code", "fx_currency", "transaction_currency"]},
-    "txn_amt": {"mandatory": False, "possible_names": ["txn_amt", "transaction_amount", "amount", "value", "net_amount", "amount_lcy", "amount_gbp", "amount_usd", "amount_inr"]},
-    "debit_gbp": {"mandatory": True, "possible_names": ["debit_gbp", "debit", "dr", "debit_amount", "debits", "debit_value", "debit_in_gbp", "debit_local", "debit_usd"]},
-    "credit_gbp": {"mandatory": True, "possible_names": ["credit_gbp", "credit", "cr", "credit_amount", "credits", "credit_value", "credit_in_gbp", "credit_local", "credit_usd"]},
-    "balance_gbp": {"mandatory": False, "possible_names": ["balance_gbp", "balance", "closing_balance", "running_balance", "net_balance", "ending_balance", "account_balance"]}
+    "posted_dt": {
+        "mandatory": False,
+        "possible_names": [
+            "posted_dt", "posted_date", "posting_date", "gl_date", "entry_date",
+            "transaction_date", "journal_date", "posting_dt", "value_date", "period_date"
+        ]
+    },
+    "doc_dt": {
+        "mandatory": False,
+        "possible_names": [
+            "doc_dt", "document_date", "doc_date", "invoice_date", "bill_date",
+            "reference_date", "voucher_date"
+        ]
+    },
+    "doc": {
+        "mandatory": False,
+        "possible_names": [
+            "doc", "document_no", "document_number", "voucher_no", "journal_no",
+            "reference_no", "ref_no", "entry_no", "transaction_id", "batch_no"
+        ]
+    },
+    "memo_description": {
+        "mandatory": False,
+        "possible_names": [
+            "memo_description", "description", "memo", "narration", "remarks",
+            "line_description", "comments", "details", "gl_description"
+        ]
+    },
+    "department_name": {
+        "mandatory": False,
+        "possible_names": [
+            "department_name", "department", "cost_center", "costcentre",
+            "division", "business_unit", "unit", "team", "function"
+        ]
+    },
+    "supplier_name": {
+        "mandatory": False,
+        "possible_names": [
+            "supplier_name", "supplier", "vendor_name", "vendor", "partner",
+            "payee", "creditor", "beneficiary"
+        ]
+    },
+    "item_name": {
+        "mandatory": False,
+        "possible_names": [
+            "item_name", "item", "product", "product_name", "sku",
+            "material", "material_name", "asset_name"
+        ]
+    },
+    "customer_name": {
+        "mandatory": False,
+        "possible_names": [
+            "customer_name", "customer", "client", "buyer", "account_name",
+            "receiver", "payer"
+        ]
+    },
+    "jnl": {
+        "mandatory": False,
+        "possible_names": [
+            "jnl", "journal_type", "entry_type", "transaction_type",
+            "record_type", "posting_type", "gl_type"
+        ]
+    },
+    "curr": {
+        "mandatory": False,
+        "possible_names": [
+            "curr", "currency", "currency_code", "fx_currency", "transaction_currency"
+        ]
+    },
+    "txn_amt": {
+        "mandatory": False,
+        "possible_names": [
+            "txn_amt", "transaction_amount", "amount", "value", "net_amount",
+            "amount_lcy", "amount_gbp", "amount_usd", "amount_inr"
+        ]
+    },
+    "debit_gbp": {
+        "mandatory": True,
+        "possible_names": [
+            "debit_gbp", "debit", "dr", "debit_amount", "debits",
+            "debit_value", "debit_in_gbp", "debit_local", "debit_usd"
+        ]
+    },
+    "credit_gbp": {
+        "mandatory": True,
+        "possible_names": [
+            "credit_gbp", "credit", "cr", "credit_amount", "credits",
+            "credit_value", "credit_in_gbp", "credit_local", "credit_usd"
+        ]
+    },
+    "balance_gbp": {
+        "mandatory": False,
+        "possible_names": [
+            "balance_gbp", "balance", "closing_balance", "running_balance",
+            "net_balance", "ending_balance", "account_balance"
+        ]
+    }
 }
 
-CUSTOM_MAPPING = {"memo/description": "memo_description", "debit_(gbp)": "debit_gbp", "credit_(gbp)": "credit_gbp", "balance_(gbp)": "balance_gbp"}
+CUSTOM_MAPPING = {
+    "memo/description": "memo_description",
+    "debit_(gbp)": "debit_gbp",
+    "credit_(gbp)": "credit_gbp",
+    "balance_(gbp)": "balance_gbp",
+}
 
 ATTRIBUTE_DEPENDENCIES = {
     "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
@@ -52,19 +140,23 @@ def validate_and_map_attributes(df, user_mapping=None):
 
     for attr, props in REQUIRED_ATTRIBUTES.items():
         found = None
+
         # Direct match
         if attr in df_columns:
             found = attr
-        # User mapping
+
+        # User-provided mapping
         elif user_mapping and attr in user_mapping and user_mapping[attr].lower() in df_columns:
             found = user_mapping[attr].lower()
-        # Check possible names
+
+        # Check all possible_names
         else:
             possible_names = [alt.lower().replace(" ", "_") for alt in props.get("possible_names", [])]
             for alt in possible_names:
                 if alt in df_columns:
                     found = alt
                     break
+
         # Fuzzy match
         if not found:
             closest = difflib.get_close_matches(attr, df_columns, n=1, cutoff=0.8)
@@ -76,22 +168,12 @@ def validate_and_map_attributes(df, user_mapping=None):
                     if close_alt:
                         found = close_alt[0]
                         break
+
         if found:
             col_mapping[attr] = found
             present.append(attr)
         else:
             missing.append(attr)
-
-    # Special handling: if debit_gbp or credit_gbp missing, check amount column
-    if ("debit_gbp" in missing or "credit_gbp" in missing):
-        amount_col_candidates = ["amount", "txn_amt", "transaction_amount", "value", "net_amount"]
-        amount_col = next((c for c in amount_col_candidates if c in df.columns), None)
-        if amount_col:
-            st.warning(f"⚠️ Mandatory Debit/Credit missing. Using '{amount_col}' as fallback amount column.")
-            col_mapping["debit_gbp"] = amount_col
-            col_mapping["credit_gbp"] = amount_col
-            if "debit_gbp" in missing: missing.remove("debit_gbp")
-            if "credit_gbp" in missing: missing.remove("credit_gbp")
 
     return col_mapping, missing, present
 
@@ -118,12 +200,14 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
                     if user_mapping is None:
                         user_mapping = {}
                     user_mapping[attr] = col
+
             col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
             mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
 
         if mandatory_missing:
             st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
             return df, {}, None
+
         st.success("All required attributes found or mapped!")
 
     with col2:
@@ -132,80 +216,162 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         for attr in REQUIRED_ATTRIBUTES.keys():
             status = "✅ Present" if attr in present else "⚠️ Missing"
             affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
-            attr_impact_data.append({"Attribute": attr, "Status": status, "Affected Metrics": ", ".join(affected_metrics)})
+            attr_impact_data.append({
+                "Attribute": attr,
+                "Status": status,
+                "Affected Metrics": ", ".join(affected_metrics)
+            })
         st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
 
-    # ------------------------
+    # ========================
     # KPI calculation
-    # ------------------------
-    account_cols = ["account", "account_name", "gl_account", "account_code", "ledger_account"]
-    account_col = next((c for c in account_cols if c in df.columns), None)
+    # ========================
+    possible_account_cols = [
+        "account", "account_name", "account_description", "gl_account", "gl_account_name",
+        "gl_account_description", "ledger_account", "ledger_account_name", "main_account",
+        "main_account_name", "sub_account", "sub_account_name", "account_code",
+        "account_no", "account_number", "account_id", "chart_of_account", "coa_code",
+        "coa_name", "coa_description", "general_ledger_account", "gl_code", "gl_name",
+        "account_title", "account_label", "account_ref", "account_reference",
+        "posting_account", "posting_name", "reporting_account", "revenue_account",
+        "expense_account", "balance_sheet_account"
+    ]
 
-    debit_col = col_mapping.get("debit_gbp", None)
-    credit_col = col_mapping.get("credit_gbp", None)
+    account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
-    if debit_col == credit_col:
-        # fallback amount column scenario
-        df["net_amount"] = df[debit_col].astype(float)
+    possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
+    possible_credit_cols = ["credit", "credit_gbp", "credits", "cr"]
+    possible_amount_cols = ["amount", "txn_amt", "transaction_amount", "value", "net_amount"]
+
+    debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
+    credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
+    amount_col = next((c for c in possible_amount_cols if c in df.columns), None)
+
+    df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
+    df = df[df[account_col].notna()]
+
+    # If debit/credit columns are missing, use amount column
+    if debit_col is None and credit_col is None:
+        if amount_col is None:
+            st.error("❌ Could not find debit, credit, or amount column for calculation.")
+            return df, {}, None
+        else:
+            st.warning(f"⚠️ Using '{amount_col}' as transaction amount since Debit/Credit not found.")
+            df[amount_col] = (
+                df[amount_col].astype(str)
+                .str.replace(",", "")
+                .str.replace(" ", "")
+                .replace("", "0")
+                .astype(float)
+            )
+            df["net_amount"] = df[amount_col]
     else:
         for col in [debit_col, credit_col]:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(",", "").replace("", "0").astype(float)
-        df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
+            if col and col in df.columns:
+                df[col] = (
+                    df[col].astype(str)
+                    .str.replace(",", "")
+                    .str.replace(" ", "")
+                    .replace("", "0")
+                    .astype(float)
+                )
+        df["net_amount"] = (
+            (df[debit_col].fillna(0) if debit_col else 0)
+            - (df[credit_col].fillna(0) if credit_col else 0)
+        )
 
-    # Account classification
+    # Account Classification
     account_mapping = {
-        "Revenue": ["revenue", "sales"],
-        "COGS": ["cogs", "cost"],
-        "OPEX": ["expense", "operating"],
+        "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
+        "COGS": ["cogs", "cost", "goods", "inventory", "hosting", "support"],
+        "OPEX": ["expense", "operating", "salary", "rent", "utilities", "marketing", "wages"],
         "Other Income": ["interest", "misc", "gain"],
-        "Other Expense": ["depreciation", "loss"]
+        "Other Expense": ["interest", "depreciation", "amortization", "loss"]
     }
 
-    def classify_account(name):
-        if pd.isna(name): return "Unclassified"
-        name = str(name).lower()
-        for cat, keys in account_mapping.items():
-            if any(k in name for k in keys): return cat
+    def classify_account(account_name):
+        if pd.isna(account_name):
+            return "Unclassified"
+        name = str(account_name).lower().replace(" ", "")
+        for category, keywords in account_mapping.items():
+            if any(k in name for k in keywords):
+                return category
         return "Unclassified"
 
-    df["account_category"] = df[account_col].apply(classify_account) if account_col else "Unclassified"
+    df["account_category"] = df[account_col].apply(classify_account)
 
-    # KPIs
-    kpis = {cat: df[df["account_category"]==cat]["net_amount"].sum() for cat in ["Revenue","COGS","OPEX","Other Income","Other Expense"]}
-    kpis["Gross Profit"] = kpis["Revenue"] - kpis["COGS"]
-    kpis["EBITDA"] = kpis["Gross Profit"] - kpis["OPEX"]
-    kpis["Net Profit"] = kpis["EBITDA"] + kpis["Other Income"] - kpis["Other Expense"]
+    total = df["net_amount"].sum()
+    revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
+    cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
+    opex = df[df["account_category"] == "OPEX"]["net_amount"].sum()
+    other_income = df[df["account_category"] == "Other Income"]["net_amount"].sum()
+    other_expense = df[df["account_category"] == "Other Expense"]["net_amount"].sum()
+
+    gross_profit = revenue - cogs
+    ebitda = gross_profit - opex
+    net_profit = ebitda + other_income - other_expense
+
+    kpis = {
+        "Revenue": revenue,
+        "COGS": cogs,
+        "OPEX": opex,
+        "Gross Profit": gross_profit,
+        "EBITDA": ebitda,
+        "Other Income": other_income,
+        "Other Expense": other_expense,
+        "Net Profit": net_profit
+    }
 
     summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
+    summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
 
     # Visualization
     if show_plot:
         st.subheader("Financial Metrics Visualization")
         fig = go.Figure()
-        colors = ["#3c92cf","#ff7f0e","#2ca02c","#d62728","#9467bd","#8c564b","#e377c2"]
-        for i,(metric,value) in enumerate(kpis.items()):
-            fig.add_trace(go.Bar(x=[metric],y=[value],text=f"{value:,.0f}",textposition="auto",marker_color=colors[i%len(colors)]))
-        fig.update_layout(title="Financial KPIs", yaxis_title="Amount (£)", template="plotly_white", showlegend=False)
+        colors = ["#3c92cf", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+
+        for i, (metric, value) in enumerate(kpis.items()):
+            fig.add_trace(go.Bar(
+                x=[metric],
+                y=[value],
+                text=f"{value:,.0f}",
+                textposition='auto',
+                marker_color=colors[i % len(colors)]
+            ))
+
+        fig.update_layout(
+            title="Financial KPIs",
+            yaxis_title="Amount (£)",
+            xaxis_title="Metrics",
+            template="plotly_white",
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            showlegend=False
+        )
+
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-    col3, col4 = st.columns([1,1], gap="large")
+    col3, col4 = st.columns([1, 1], gap="large")
+
     with col3:
         st.subheader("KPIs")
-        kpi_df = pd.DataFrame(list(kpis.items()), columns=["Metric","Value"])
+        kpi_df = pd.DataFrame(list(kpis.items()), columns=["Metric", "Value"])
         kpi_df["Value"] = kpi_df["Value"].apply(lambda x: f"{x:,.2f}")
         st.dataframe(kpi_df, use_container_width=True)
+
     with col4:
         st.subheader("Summary by Account Category")
         st.dataframe(summary_df, use_container_width=True)
 
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
-        total_debit=(debit_col, "sum") if debit_col else ("net_amount","sum"),
-        total_credit=(credit_col, "sum") if credit_col else ("net_amount","sum")
+        total_debit=("debit_gbp", "sum"),
+        total_credit=("credit_gbp", "sum")
     ).reset_index()
     tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
+
     st.subheader("Trial Balance")
     st.dataframe(tb_df, use_container_width=True)
 
@@ -215,27 +381,61 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 # Streamlit App
 # ------------------------
 st.title("Interactive GL Analyzer")
-uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx","csv"])
 
-if uploaded_file:
+uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx", "csv"])
+
+if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
 
-    # Header detection
-    header_keywords = ["debit","credit","amount","balance","posted_date","doc_date","gl_account","account","document_no","description","memo","department","supplier","customer","item","product"]
+    # Enhanced Header Row Detection
+    header_keywords = [
+        "debit", "credit", "amount", "balance", "debit_amount", "credit_amount", 
+        "net_amount", "total", "transaction_amount", "value", "dr", "cr", 
+        "debit_gbp", "credit_gbp", "amount_gbp",
+        "gl_date", "posted_date", "posting_date", "transaction_date", "doc_date", 
+        "journal_date", "date", "entry_date", "value_date", "fiscal_period", 
+        "period", "fiscal_year", "year", "month",
+        "gl_account", "account", "account_number", "account_no", "account_name", 
+        "main_account", "ledger_account", "account_code", "coa_code", "coa_name", 
+        "chart_of_account",
+        "doc_no", "document_no", "document_number", "voucher_no", "journal_id", 
+        "journal_no", "reference", "reference_no", "ref_no", "batch_no", 
+        "entry_id", "transaction_id",
+        "description", "memo", "memo_description", "narration", "remarks", 
+        "comments", "details", "line_description", "transaction_description",
+        "department", "department_name", "cost_center", "costcentre", "division", 
+        "business_unit", "unit", "entity", "company", "company_name", "location", 
+        "region", "branch",
+        "vendor", "vendor_name", "supplier", "supplier_name", "customer", 
+        "customer_name", "employee", "employee_name", "partner", "client",
+        "product", "product_name", "item", "item_name", "project", "project_name", 
+        "job", "job_name", "work_order", "work_order_no",
+        "transaction_type", "transaction_category", "entry_type", "journal_type", 
+        "posting_type", "record_type", "gl_type", "account_type", "source", 
+        "source_system", "module",
+        "currency", "currency_code", "fx_rate", "exchange_rate", "status", "flag", 
+        "approved_by", "created_by", "updated_by", "timestamp"
+    ]
+
     header_row_idx = None
-    for i,row in df_raw.iterrows():
-        row_str = " ".join([str(x).lower() for x in row if pd.notna(x)])
-        if sum(kw in row_str for kw in header_keywords) >= 3:
+    for i, row in df_raw.iterrows():
+        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
+        match_count = sum(1 for kw in header_keywords if kw in row_str)
+        if match_count >= 3:
             header_row_idx = i
             break
 
     if header_row_idx is None:
-        st.error("❌ Could not detect a valid header row.")
+        st.error("❌ Could not detect a valid header row. Please ensure your file contains Debit/Credit or standard GL columns.")
     else:
-        st.success(f"✅ Header row detected at line {header_row_idx+1}")
-        df = pd.read_csv(uploaded_file, header=header_row_idx) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file, header=header_row_idx)
-        df.columns = [str(c).strip().lower().replace(" ","_") for c in df.columns]
+        st.success(f"✅ Header row detected at line {header_row_idx + 1}")
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file, header=header_row_idx)
+        else:
+            df = pd.read_excel(uploaded_file, header=header_row_idx)
+
+        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
         analyze_gl(df)
