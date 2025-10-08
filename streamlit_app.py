@@ -131,9 +131,11 @@ ATTRIBUTE_DEPENDENCIES = {
 # ------------------------
 # Validation + Mapping
 # ------------------------
+
 def validate_and_map_attributes(df, user_mapping=None):
+    # Clean up column names for consistent matching
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
-    df_columns = [c.lower().strip() for c in df.columns]
+    df_columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
     col_mapping, missing, present = {}, [], []
 
     for attr, props in REQUIRED_ATTRIBUTES.items():
@@ -147,13 +149,27 @@ def validate_and_map_attributes(df, user_mapping=None):
         elif user_mapping and attr in user_mapping and user_mapping[attr].lower() in df_columns:
             found = user_mapping[attr].lower()
 
-        # 3️⃣ Match from possible names list
+        # 3️⃣ Check all possible_names
         else:
-            for alt in props.get("possible_names", []):
-                if alt.lower() in df_columns:
-                    found = alt.lower()
+            possible_names = [alt.lower().replace(" ", "_") for alt in props.get("possible_names", [])]
+            for alt in possible_names:
+                if alt in df_columns:
+                    found = alt
                     break
 
+        # 4️⃣ Fuzzy match (handles close names like "debit_amt" → "debit_gbp")
+        if not found:
+            closest = difflib.get_close_matches(attr, df_columns, n=1, cutoff=0.8)
+            if closest:
+                found = closest[0]
+            else:
+                for alt in props.get("possible_names", []):
+                    close_alt = difflib.get_close_matches(alt.lower(), df_columns, n=1, cutoff=0.8)
+                    if close_alt:
+                        found = close_alt[0]
+                        break
+
+        # 5️⃣ Store results
         if found:
             col_mapping[attr] = found
             present.append(attr)
