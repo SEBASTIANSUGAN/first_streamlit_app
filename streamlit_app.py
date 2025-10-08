@@ -133,21 +133,34 @@ ATTRIBUTE_DEPENDENCIES = {
 # ------------------------
 def validate_and_map_attributes(df, user_mapping=None):
     df.rename(columns=CUSTOM_MAPPING, inplace=True)
-    df_columns = df.columns.tolist()
+    df_columns = [c.lower().strip() for c in df.columns]
     col_mapping, missing, present = {}, [], []
 
     for attr, props in REQUIRED_ATTRIBUTES.items():
+        found = None
+
+        # 1️⃣ Direct match
         if attr in df_columns:
-            col_mapping[attr] = attr
-            present.append(attr)
-        elif user_mapping and attr in user_mapping and user_mapping[attr] in df_columns:
-            col_mapping[attr] = user_mapping[attr]
+            found = attr
+
+        # 2️⃣ User-provided mapping
+        elif user_mapping and attr in user_mapping and user_mapping[attr].lower() in df_columns:
+            found = user_mapping[attr].lower()
+
+        # 3️⃣ Match from possible names list
+        else:
+            for alt in props.get("possible_names", []):
+                if alt.lower() in df_columns:
+                    found = alt.lower()
+                    break
+
+        if found:
+            col_mapping[attr] = found
             present.append(attr)
         else:
             missing.append(attr)
 
     return col_mapping, missing, present
-
 
 # ------------------------
 # GL Analyzer
