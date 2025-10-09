@@ -320,10 +320,13 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.dataframe(summary_df, use_container_width=True)
 
     # Trial Balance
+    df[debit_col] = df[debit_col].fillna(0)
+    df[credit_col] = df[credit_col].fillna(0)
+
     tb_df = df.groupby("account_category").agg(
-        total_debit=(df[debit_col].fillna(0), "sum"),
-        total_credit=(df[credit_col].fillna(0), "sum")
-    ).reset_index()
+    total_debit=(debit_col, "sum"),
+    total_credit=(credit_col, "sum")
+      ).reset_index()
     tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
 
     st.subheader("Trial Balance")
