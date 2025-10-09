@@ -254,7 +254,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     }
 
     # --- Account Classification using 'detail' column ---
-    if "detail" in df.columns:
+    if "details" in df.columns:
         def classify_account(account_name):
             if pd.isna(account_name):
                 return "Unclassified"
