@@ -246,12 +246,28 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         return df, {}, None
 
     account_mapping = {
-        "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
-        "COGS": ["cogs", "cost", "goods", "inventory", "hosting", "support"],
-        "OPEX": ["expense", "operating", "salary", "rent", "utilities", "marketing", "wages"],
-        "Other Income": ["interest", "misc", "gain"],
-        "Other Expense": ["interest", "depreciation", "amortization", "loss"]
+        "Revenue": [
+            "revenue", "sales", "subscription", "license", "saas", "renewal"
+        ],
+        "COGS": [
+            "cogs", "cost", "goods", "inventory", "hosting", "support"
+        ],
+        "OPEX": [
+            "expense", "operating", "salary", "rent", "utilities", "marketing",
+            "wages", "office supplies", "professional services", "telephone",
+            "vehicles", "equipment", "furniture and fixtures"
+        ],
+        "Other Income": [
+            "interest income", "dividend income", "gain", "gain/loss on sales of asset",
+            "exchange gain"
+        ],
+        "Other Expense": [
+            "interest expense", "amortization", "amortization of intangible assets",
+            "depreciation", "loss", "exchange loss", "taxation", "adjusting",
+            "other expenses"
+        ]
     }
+
 
     def classify_account(account_name):
         if pd.isna(account_name):
