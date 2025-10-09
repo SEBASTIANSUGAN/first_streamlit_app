@@ -216,24 +216,34 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
                              "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
-    possible_debit_cols = ["debit_gbp", "debit", "dr", "debit_amount", "debits", "debit_value", "debit_in_gbp", "debit_local", "debit_usd","debit_($)"]
-    possible_credit_cols = ["credit_gbp", "credit", "cr", "credit_amount", "credits","credit_value", "credit_in_gbp", "credit_local", "credit_usd","credit_($)"]
-
+    # Detect debit, credit, or amount columns
+    possible_debit_cols = ["debit_gbp", "debit", "dr", "debit_amount", "debits",
+                           "debit_value", "debit_in_gbp", "debit_local", "debit_usd", "debit_($)"]
+    possible_credit_cols = ["credit_gbp", "credit", "cr", "credit_amount", "credits",
+                            "credit_value", "credit_in_gbp", "credit_local", "credit_usd", "credit_($)"]
+    possible_amount_cols = ["txn_amt", "transaction_amount", "amount", "value", "net_amount"]
+    
     debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
     credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
-
-    df = df[~df[account_col].astype(str).str.lower().str.contains("total|sum")]
-    df = df[df[account_col].notna()]
-    df = df[df[debit_col].notna() | df[credit_col].notna()]
-
-    for col in [debit_col, credit_col]:
-        df[col] = (df[col].astype(str)
-                   .str.replace(",", "")
-                   .str.replace(" ", "")
-                   .replace("", "0")
-                   .astype(float))
-
-    df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
+    amount_col = next((c for c in possible_amount_cols if c in df.columns), None)
+    
+    # Clean numeric columns
+    for col in [debit_col, credit_col, amount_col]:
+        if col and col in df.columns:
+            df[col] = (df[col].astype(str)
+                       .str.replace(",", "")
+                       .str.replace(" ", "")
+                       .replace("", "0")
+                       .astype(float))
+    
+    # Derive net amount logic
+    if debit_col and credit_col:
+        df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
+    elif amount_col:
+        df["net_amount"] = df[amount_col].fillna(0)
+    else:
+        st.error("❌ Could not find debit/credit or amount columns for calculation.")
+        return df, {}, None
 
     account_mapping = {
         "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
