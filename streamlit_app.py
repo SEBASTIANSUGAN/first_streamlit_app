@@ -246,25 +246,25 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         return df, {}, None
 
     account_mapping = {
-        "Revenue": [
-            "revenue", "sales", "subscription", "license", "saas", "renewal"
+         "Revenue": [
+        "sales", "sales return"
         ],
         "COGS": [
-            "cogs", "cost", "goods", "inventory", "hosting", "support"
+            "cost of sales"
         ],
         "OPEX": [
-            "expense", "operating", "salary", "rent", "utilities", "marketing",
-            "wages", "office supplies", "professional services", "telephone",
-            "vehicles", "equipment", "furniture and fixtures"
+            "staff costs", "bad debt expense", "commissions", "conferences",
+            "advertisements", "travel", "entertainment", "office supplies",
+            "professional services", "telephone", "utilities", "other expenses",
+            "rent", "vehicles", "equipment", "furniture and fixtures"
         ],
         "Other Income": [
-            "interest income", "dividend income", "gain", "gain/loss on sales of asset",
+            "interest income", "dividend income", "gain/loss on sales of asset",
             "exchange gain"
         ],
         "Other Expense": [
-            "interest expense", "amortization", "amortization of intangible assets",
-            "depreciation", "loss", "exchange loss", "taxation", "adjusting",
-            "other expenses"
+            "interest expense", "amortization of intangible assets",
+            "depreciation", "exchange loss", "taxation", "adjusting"
         ]
     }
 
