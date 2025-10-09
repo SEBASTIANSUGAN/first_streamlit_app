@@ -216,8 +216,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
                              "description", "memo_description"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
-    possible_debit_cols = ["debit", "debit_gbp", "debits", "dr"]
-    possible_credit_cols = ["credit", "credit_gbp", "credits", "cr"]
+    possible_debit_cols = ["debit_gbp", "debit", "dr", "debit_amount", "debits", "debit_value", "debit_in_gbp", "debit_local", "debit_usd","debit_($)"]
+    possible_credit_cols = ["credit_gbp", "credit", "cr", "credit_amount", "credits","credit_value", "credit_in_gbp", "credit_local", "credit_usd","credit_($)"]
 
     debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
     credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
