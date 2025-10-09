@@ -321,8 +321,8 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
 
     # Trial Balance
     tb_df = df.groupby("account_category").agg(
-        total_debit=("debit_gbp", "sum"),
-        total_credit=("credit_gbp", "sum")
+        total_debit=(df[debit_col].fillna(0), "sum"),
+        total_credit=(df[credit_col].fillna(0), "sum")
     ).reset_index()
     tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
 
