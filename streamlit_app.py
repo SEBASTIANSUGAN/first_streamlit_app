@@ -334,10 +334,15 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     df[credit_col] = df[credit_col].fillna(0)
 
     tb_df = df.groupby("account_category").agg(
-    total_debit=(debit_col, "sum"),
-    total_credit=(credit_col, "sum")
-      ).reset_index()
-    tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
+    total_debit=(debit_col if debit_col else amount_col, "sum"),
+    total_credit=(credit_col if credit_col else amount_col, "sum")
+    ).reset_index()
+
+    # Compute balance (treat single-amount case as net balance)
+    if debit_col and credit_col:
+        tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
+    else:
+        tb_df["balance"] = tb_df["total_debit"]
 
     st.subheader("Trial Balance")
     st.dataframe(tb_df, use_container_width=True)
