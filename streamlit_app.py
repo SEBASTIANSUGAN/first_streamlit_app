@@ -1,348 +1,182 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import difflib
 
 # ------------------------
 # Configurations
 # ------------------------
 REQUIRED_ATTRIBUTES = {
-    "posted_dt": {"mandatory": False, "possible_names": [
-        "posted_dt", "posted_date", "posting_date", "gl_date", "entry_date",
-        "transaction_date", "journal_date", "posting_dt", "value_date", "period_date"
-    ]},
-    "doc_dt": {"mandatory": False, "possible_names": [
-        "doc_dt", "document_date", "doc_date", "invoice_date", "bill_date",
-        "reference_date", "voucher_date"
-    ]},
-    "doc": {"mandatory": False, "possible_names": [
-        "doc", "document_no", "document_number", "voucher_no", "journal_no",
-        "reference_no", "ref_no", "entry_no", "transaction_id", "batch_no"
-    ]},
-    "memo_description": {"mandatory": False, "possible_names": [
-        "memo_description", "description", "memo", "narration", "remarks",
-        "line_description", "comments", "details", "gl_description"
-    ]},
-    "department_name": {"mandatory": False, "possible_names": [
-        "department_name", "department", "cost_center", "costcentre",
-        "division", "business_unit", "unit", "team", "function"
-    ]},
-    "supplier_name": {"mandatory": False, "possible_names": [
-        "supplier_name", "supplier", "vendor_name", "vendor", "partner",
-        "payee", "creditor", "beneficiary"
-    ]},
-    "item_name": {"mandatory": False, "possible_names": [
-        "item_name", "item", "product", "product_name", "sku",
-        "material", "material_name", "asset_name"
-    ]},
-    "customer_name": {"mandatory": False, "possible_names": [
-        "customer_name", "customer", "client", "buyer", "account_name",
-        "receiver", "payer"
-    ]},
-    "jnl": {"mandatory": False, "possible_names": [
-        "jnl", "journal_type", "entry_type", "transaction_type",
-        "record_type", "posting_type", "gl_type"
-    ]},
-    "curr": {"mandatory": False, "possible_names": [
-        "curr", "currency", "currency_code", "fx_currency", "transaction_currency"
-    ]},
-    "txn_amt": {"mandatory": False, "possible_names": [
-        "txn_amt", "transaction_amount", "amount", "value", "net_amount",
-        "amount_lcy", "amount_gbp", "amount_usd", "amount_inr"
-    ]},
-    "debit_gbp": {"mandatory": False, "possible_names": [
-        "debit_gbp", "debit", "dr", "debit_amount", "debits",
-        "debit_value", "debit_in_gbp", "debit_local", "debit_usd", "debit_($)"
-    ]},
-    "credit_gbp": {"mandatory": False, "possible_names": [
-        "credit_gbp", "credit", "cr", "credit_amount", "credits",
-        "credit_value", "credit_in_gbp", "credit_local", "credit_usd", "credit_($)"
-    ]},
-    "balance_gbp": {"mandatory": False, "possible_names": [
-        "balance_gbp", "balance", "closing_balance", "running_balance",
-        "net_balance", "ending_balance", "account_balance"
-    ]}
-}
-
-CUSTOM_MAPPING = {
-    "memo/description": "memo_description",
-    "debit_(gbp)": "debit_gbp",
-    "credit_(gbp)": "credit_gbp",
-    "balance_(gbp)": "balance_gbp",
-}
-
-ATTRIBUTE_DEPENDENCIES = {
-    "debit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "credit_gbp": ["Revenue", "COGS", "OPEX", "Gross Profit", "EBITDA", "Net Profit"],
-    "balance_gbp": ["Net Profit"],
-    "txn_amt": ["Revenue", "COGS", "OPEX"],
-    "curr": ["Revenue", "COGS", "OPEX"],
-    "jnl": ["OPEX", "COGS"],
-    "posted_dt": ["Revenue trends", "Period-based KPIs"],
-    "doc_dt": ["Revenue trends", "Period-based KPIs"],
-    "doc": ["Audit/Traceability"],
-    "memo_description": ["OPEX Classification", "COGS Classification"],
-    "department_name": ["OPEX Classification"],
-    "supplier_name": ["COGS Classification"],
-    "item_name": ["COGS Classification"],
-    "customer_name": ["Revenue Classification"]
+    "posted_dt": {
+        "mandatory": False,
+        "possible_names": [
+            "posted_dt", "posted_date", "posting_date", "gl_date", "entry_date",
+            "transaction_date", "journal_date", "posting_dt", "value_date",
+        ],
+    },
+    "account_category": {
+        "mandatory": True,
+        "possible_names": [
+            "account_category", "acct_category", "gl_category", "category",
+        ],
+    },
+    "debit": {
+        "mandatory": False,
+        "possible_names": [
+            "debit", "debit_amount", "dr_amount", "debits", "amount_dr",
+        ],
+    },
+    "credit": {
+        "mandatory": False,
+        "possible_names": [
+            "credit", "credit_amount", "cr_amount", "credits", "amount_cr",
+        ],
+    },
+    "amount": {
+        "mandatory": False,
+        "possible_names": [
+            "amount", "amt", "value", "transaction_amount",
+        ],
+    },
 }
 
 # ------------------------
-# Validation + Mapping
+# Helper Functions
 # ------------------------
-def validate_and_map_attributes(df, user_mapping=None):
-    df.rename(columns=CUSTOM_MAPPING, inplace=True)
-    df_columns = [c.lower().strip() for c in df.columns]
-    col_mapping, missing, present = {}, [], []
+def find_best_match(columns, possible_names):
+    for name in possible_names:
+        for col in columns:
+            if name.lower() == col.lower():
+                return col
+    matches = difflib.get_close_matches(possible_names[0], columns, n=1, cutoff=0.6)
+    return matches[0] if matches else None
 
-    for attr, props in REQUIRED_ATTRIBUTES.items():
-        found = None
-        if attr in df_columns:
-            found = attr
-        elif user_mapping and attr in user_mapping and user_mapping[attr].lower() in df_columns:
-            found = user_mapping[attr].lower()
+
+def detect_header(df):
+    """
+    Automatically detect header row in uploaded CSV/Excel
+    """
+    header_row = 0
+    for i, row in df.iterrows():
+        if any(str(cell).lower() in [name.lower() for attr in REQUIRED_ATTRIBUTES.values() for name in attr["possible_names"]] for cell in row):
+            header_row = i
+            break
+    df.columns = df.iloc[header_row]
+    df = df.drop(range(header_row + 1))
+    df = df.reset_index(drop=True)
+    return df
+
+
+# ------------------------
+# GL Analysis Logic
+# ------------------------
+def analyze_gl(df, user_mapping=None):
+    try:
+        df.columns = df.columns.str.strip().str.lower()
+
+        # Ensure account_category column exists
+        account_col = find_best_match(df.columns, REQUIRED_ATTRIBUTES["account_category"]["possible_names"])
+        if not account_col:
+            st.error("❌ No valid account column found. Cannot compute KPIs.")
+            return
+
+        # Detect debit, credit, amount columns
+        debit_col = find_best_match(df.columns, REQUIRED_ATTRIBUTES["debit"]["possible_names"])
+        credit_col = find_best_match(df.columns, REQUIRED_ATTRIBUTES["credit"]["possible_names"])
+        amount_col = find_best_match(df.columns, REQUIRED_ATTRIBUTES["amount"]["possible_names"])
+
+        # Handle Trial Balance calculation
+        if not debit_col and not credit_col:
+            if not amount_col:
+                st.error("❌ No valid debit, credit, or amount column found for total calculation.")
+                return
+
+            tb_df = df.groupby(account_col).agg(
+                total_amount=(amount_col, "sum")
+            ).reset_index()
         else:
-            for alt in props.get("possible_names", []):
-                if alt.lower() in df_columns:
-                    found = alt.lower()
-                    break
+            if debit_col not in df.columns:
+                df["temp_debit"] = 0
+                debit_col = "temp_debit"
+            if credit_col not in df.columns:
+                df["temp_credit"] = 0
+                credit_col = "temp_credit"
 
-        if found:
-            col_mapping[attr] = found
-            present.append(attr)
+            tb_df = df.groupby(account_col).agg(
+                total_debit=(debit_col, "sum"),
+                total_credit=(credit_col, "sum")
+            ).reset_index()
+
+        # ------------------------
+        # Trial Balance Chart
+        # ------------------------
+        st.subheader("📊 Trial Balance Summary")
+        st.dataframe(tb_df)
+
+        if "total_amount" in tb_df.columns:
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=tb_df[account_col],
+                        y=tb_df["total_amount"],
+                        name="Total Amount",
+                        marker_color="indigo",
+                    )
+                ]
+            )
         else:
-            missing.append(attr)
-
-    return col_mapping, missing, present
-
-
-# ------------------------
-# GL Analyzer
-# ------------------------
-def analyze_gl(df, user_mapping=None, show_plot=True):
-    col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-    mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
-    optional_missing = [m for m in missing if not REQUIRED_ATTRIBUTES[m]["mandatory"]]
-
-    # Layout
-    col1, col2 = st.columns([1, 2], gap="large")
-
-    with col1:
-        if mandatory_missing or optional_missing:
-            st.subheader("Interactive Attribute Mapping")
-            for attr in mandatory_missing + optional_missing:
-                col = st.selectbox(
-                    f"Map '{attr}' to a column (skip if not available)",
-                    options=[""] + list(df.columns),
-                    key=attr
-                )
-                if col != "":
-                    if user_mapping is None:
-                        user_mapping = {}
-                    user_mapping[attr] = col
-
-            col_mapping, missing, present = validate_and_map_attributes(df, user_mapping)
-            mandatory_missing = [m for m in missing if REQUIRED_ATTRIBUTES[m]["mandatory"]]
-
-        if mandatory_missing:
-            st.error(f"Mandatory attributes missing: {mandatory_missing}. Cannot compute KPIs.")
-            return df, {}, None
-
-        st.success("All required attributes found or mapped!")
-
-    with col2:
-        st.subheader("Attribute Impact on Metrics")
-        attr_impact_data = []
-        for attr in REQUIRED_ATTRIBUTES.keys():
-            status = "✅ Present" if attr in present else "⚠️ Missing"
-            affected_metrics = ATTRIBUTE_DEPENDENCIES.get(attr, ["General KPIs"])
-            attr_impact_data.append({
-                "Attribute": attr,
-                "Status": status,
-                "Affected Metrics": ", ".join(affected_metrics)
-            })
-        st.dataframe(pd.DataFrame(attr_impact_data), use_container_width=True)
-
-    # Detect key columns
-    possible_account_cols = ["account_name", "account", "gl_account", "account_code", "description", "memo_description"]
-    account_col = next((c for c in possible_account_cols if c in df.columns), None)
-
-    possible_debit_cols = ["debit_gbp", "debit", "dr", "debit_amount", "debits", "debit_value",
-                           "debit_in_gbp", "debit_local", "debit_usd", "debit_($)"]
-    possible_credit_cols = ["credit_gbp", "credit", "cr", "credit_amount", "credits", "credit_value",
-                            "credit_in_gbp", "credit_local", "credit_usd", "credit_($)"]
-    possible_amount_cols = ["txn_amt", "transaction_amount", "amount", "value", "net_amount"]
-
-    debit_col = next((c for c in possible_debit_cols if c in df.columns), None)
-    credit_col = next((c for c in possible_credit_cols if c in df.columns), None)
-    amount_col = next((c for c in possible_amount_cols if c in df.columns), None)
-
-    # Clean numeric columns
-    for col in [debit_col, credit_col, amount_col]:
-        if col and col in df.columns:
-            df[col] = (df[col].astype(str)
-                       .str.replace(",", "")
-                       .str.replace(" ", "")
-                       .replace("", "0")
-                       .astype(float))
-
-    # Derive net amount
-    if debit_col and credit_col:
-        df["net_amount"] = df[debit_col].fillna(0) - df[credit_col].fillna(0)
-    elif amount_col:
-        df["net_amount"] = df[amount_col].fillna(0)
-    else:
-        st.error("❌ Could not find debit/credit or amount columns for calculation.")
-        return df, {}, None
-
-    # Account classification
-    account_mapping = {
-        "Revenue": ["revenue", "sales", "subscription", "license", "saas", "renewal"],
-        "COGS": ["cogs", "cost", "goods", "inventory", "hosting", "support"],
-        "OPEX": ["expense", "operating", "salary", "rent", "utilities", "marketing", "wages"],
-        "Other Income": ["interest", "misc", "gain"],
-        "Other Expense": ["interest", "depreciation", "amortization", "loss"]
-    }
-
-    def classify_account(account_name):
-        if pd.isna(account_name):
-            return "Unclassified"
-        name = str(account_name).lower().replace(" ", "")
-        for category, keywords in account_mapping.items():
-            if any(k in name for k in keywords):
-                return category
-        return "Unclassified"
-
-    df["account_category"] = df[account_col].apply(classify_account)
-
-    # KPI Calculations
-    revenue = df[df["account_category"] == "Revenue"]["net_amount"].sum()
-    cogs = df[df["account_category"] == "COGS"]["net_amount"].sum()
-    opex = df[df["account_category"] == "OPEX"]["net_amount"].sum()
-    other_income = df[df["account_category"] == "Other Income"]["net_amount"].sum()
-    other_expense = df[df["account_category"] == "Other Expense"]["net_amount"].sum()
-
-    gross_profit = revenue - cogs
-    ebitda = gross_profit - opex
-    net_profit = ebitda + other_income - other_expense
-
-    kpis = {
-        "Revenue": revenue,
-        "COGS": cogs,
-        "OPEX": opex,
-        "Gross Profit": gross_profit,
-        "EBITDA": ebitda,
-        "Other Income": other_income,
-        "Other Expense": other_expense,
-        "Net Profit": net_profit
-    }
-
-    summary_df = df.groupby("account_category")["net_amount"].sum().reset_index()
-    summary_df = summary_df.sort_values(by="net_amount", ascending=False).reset_index(drop=True)
-
-    # Visualization
-    if show_plot:
-        st.subheader("Financial Metrics Visualization")
-        fig = go.Figure()
-        colors = ["#3c92cf", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
-
-        for i, (metric, value) in enumerate(kpis.items()):
-            fig.add_trace(go.Bar(
-                x=[metric],
-                y=[value],
-                text=f"{value:,.0f}",
-                textposition='auto',
-                marker_color=colors[i % len(colors)]
-            ))
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=tb_df[account_col],
+                        y=tb_df["total_debit"],
+                        name="Total Debit",
+                        marker_color="green",
+                    ),
+                    go.Bar(
+                        x=tb_df[account_col],
+                        y=tb_df["total_credit"],
+                        name="Total Credit",
+                        marker_color="orange",
+                    ),
+                ]
+            )
 
         fig.update_layout(
-            title="Financial KPIs",
-            yaxis_title="Amount (£)",
-            xaxis_title="Metrics",
-            template="plotly_white",
-            showlegend=False
+            title="Trial Balance Overview",
+            xaxis_title="Account Category",
+            yaxis_title="Amount",
+            barmode="group",
+            height=500,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
 
-    # KPI + Summary
-    col3, col4 = st.columns([1, 1], gap="large")
-    with col3:
-        st.subheader("KPIs")
-        kpi_df = pd.DataFrame(list(kpis.items()), columns=["Metric", "Value"])
-        kpi_df["Value"] = kpi_df["Value"].apply(lambda x: f"{x:,.2f}")
-        st.dataframe(kpi_df, use_container_width=True)
-
-    with col4:
-        st.subheader("Summary by Account Category")
-        st.dataframe(summary_df, use_container_width=True)
-
-    # ------------------------
-    # Trial Balance (Handles both debit/credit and amount)
-    # ------------------------
-    if debit_col and credit_col:
-        df[debit_col] = df[debit_col].fillna(0)
-        df[credit_col] = df[credit_col].fillna(0)
-
-        tb_df = df.groupby("account_category").agg(
-            total_debit=(debit_col, "sum"),
-            total_credit=(credit_col, "sum")
-        ).reset_index()
-        tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
-
-    elif amount_col:
-        df[amount_col] = df[amount_col].fillna(0)
-        tb_df = df.groupby("account_category").agg(
-            total_amount=(amount_col, "sum")
-        ).reset_index()
-        tb_df.rename(columns={"total_amount": "balance"}, inplace=True)
-        tb_df["total_debit"] = tb_df["balance"].apply(lambda x: x if x > 0 else 0)
-        tb_df["total_credit"] = tb_df["balance"].apply(lambda x: -x if x < 0 else 0)
-    else:
-        st.error("❌ Could not find debit/credit or amount columns for trial balance.")
-        return df, {}, None
-
-    st.subheader("Trial Balance")
-    st.dataframe(tb_df, use_container_width=True)
-
-    return df, kpis, summary_df
+    except Exception as e:
+        st.error(f"❌ Error during analysis: {e}")
 
 
 # ------------------------
-# Streamlit App Entry
+# Streamlit App
 # ------------------------
-st.title("Interactive GL Analyzer")
+st.set_page_config(page_title="GL Analyzer", layout="wide")
 
-uploaded_file = st.file_uploader("Upload your GL file (Excel/CSV)", type=["xlsx", "csv"])
+st.title("📘 General Ledger Analyzer")
+
+uploaded_file = st.file_uploader("Upload GL File (CSV or Excel)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".csv"):
-        df_raw = pd.read_csv(uploaded_file, header=None)
-    else:
-        df_raw = pd.read_excel(uploaded_file, header=None)
-
-    header_keywords = [
-        "debit", "credit", "amount", "balance", "debit_amount", "credit_amount",
-        "gl_date", "posted_date", "posting_date", "transaction_date", "doc_date",
-        "account", "document_no", "description", "department", "vendor", "customer",
-        "product", "project", "transaction_type", "currency"
-    ]
-
-    header_row_idx = None
-    for i, row in df_raw.iterrows():
-        row_str = " ".join([str(x).lower() for x in row.tolist() if pd.notna(x)])
-        match_count = sum(1 for kw in header_keywords if kw in row_str)
-        if match_count >= 3:
-            header_row_idx = i
-            break
-
-    if header_row_idx is None:
-        st.error("❌ Could not detect a valid header row. Please ensure your file contains Debit/Credit or standard GL columns.")
-    else:
-        st.success(f"✅ Header row detected at line {header_row_idx + 1}")
+    try:
         if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file, header=header_row_idx)
+            df_raw = pd.read_csv(uploaded_file, header=None)
         else:
-            df = pd.read_excel(uploaded_file, header=header_row_idx)
+            df_raw = pd.read_excel(uploaded_file, header=None)
 
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        analyze_gl(df)
+        df_raw = detect_header(df_raw)
+
+        st.success("✅ File uploaded successfully. Preview below:")
+        st.dataframe(df_raw.head())
+
+        analyze_gl(df_raw)
+
+    except Exception as e:
+        st.error(f"❌ Error reading file: {e}")
