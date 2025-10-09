@@ -213,7 +213,7 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
     # Continue with KPI calculation
     # ========================
     possible_account_cols = ["account_name", "account", "gl_account", "account_code",
-                             "description", "memo_description", "account_key"]
+                             "description", "memo_description", "account_key", "details"]
     account_col = next((c for c in possible_account_cols if c in df.columns), None)
 
     # Detect debit, credit, or amount columns
