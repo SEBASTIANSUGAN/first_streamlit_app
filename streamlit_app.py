@@ -86,14 +86,14 @@ REQUIRED_ATTRIBUTES = {
         "mandatory": True,
         "possible_names": [
             "debit_gbp", "debit", "dr", "debit_amount", "debits",
-            "debit_value", "debit_in_gbp", "debit_local", "debit_usd"
+            "debit_value", "debit_in_gbp", "debit_local", "debit_usd","debit_($)"
         ]
     },
     "credit_gbp": {
         "mandatory": True,
         "possible_names": [
             "credit_gbp", "credit", "cr", "credit_amount", "credits",
-            "credit_value", "credit_in_gbp", "credit_local", "credit_usd"
+            "credit_value", "credit_in_gbp", "credit_local", "credit_usd","credit_($)"
         ]
     },
     "balance_gbp": {
