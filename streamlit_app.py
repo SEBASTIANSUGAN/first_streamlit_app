@@ -253,14 +253,28 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         "Other Expense": ["interest", "depreciation", "amortization", "loss"]
     }
 
-    def classify_account(account_name):
-        if pd.isna(account_name):
+    # --- Account Classification using 'detail' column ---
+    if "detail" in df.columns:
+        def classify_account(account_name):
+            if pd.isna(account_name):
+                return "Unclassified"
+            name = str(account_name).lower().replace(" ", "")
+            for category, keywords in account_mapping.items():
+                if any(k in name for k in keywords):
+                    return category
             return "Unclassified"
-        name = str(account_name).lower().replace(" ", "")
-        for category, keywords in account_mapping.items():
-            if any(k in name for k in keywords):
-                return category
-        return "Unclassified"
+    
+        df["account_category"] = df["detail"].apply(classify_account)
+    else:
+        st.warning("⚠️ 'detail' column not found — using account column for classification instead.")
+        def classify_account(account_name):
+            if pd.isna(account_name):
+                return "Unclassified"
+            name = str(account_name).lower().replace(" ", "")
+            for category, keywords in account_mapping.items():
+                if any(k in name for k in keywords):
+                    return category
+            return "Unclassified"
 
     df["account_category"] = df[account_col].apply(classify_account)
 
