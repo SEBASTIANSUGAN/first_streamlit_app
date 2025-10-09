@@ -330,10 +330,9 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
         st.dataframe(summary_df, use_container_width=True)
 
     # Trial Balance
-    # Fill NaNs
-    if debit_col in df.columns:
+    if debit_col and debit_col in df.columns:
         df[debit_col] = df[debit_col].fillna(0)
-    if credit_col in df.columns:
+    if credit_col and credit_col in df.columns:
         df[credit_col] = df[credit_col].fillna(0)
     
     # Handle aggregation logic
@@ -343,23 +342,21 @@ def analyze_gl(df, user_mapping=None, show_plot=True):
             total_credit=(credit_col, "sum")
         ).reset_index()
         tb_df["balance"] = tb_df["total_debit"] - tb_df["total_credit"]
+    elif amount_col and amount_col in df.columns:
+        df[amount_col] = df[amount_col].fillna(0)
+        tb_df = df.groupby("account_category").agg(
+            total_amount=(amount_col, "sum")
+        ).reset_index()
+        tb_df["balance"] = tb_df["total_amount"]
     else:
-        # Fallback to amount column if debit and credit are missing
-        amount_col = find_best_match(df.columns, REQUIRED_ATTRIBUTES["amount"]["possible_names"])
-        if amount_col:
-            df[amount_col] = df[amount_col].fillna(0)
-            tb_df = df.groupby("account_category").agg(
-                total_amount=(amount_col, "sum")
-            ).reset_index()
-            tb_df["balance"] = tb_df["total_amount"]
-        else:
-            st.error("❌ No valid debit, credit, or amount column found for balance calculation.")
-            return df, None, None
+        st.error("❌ No valid debit, credit, or amount column found for balance calculation.")
+        return df, kpis, summary_df
     
     st.subheader("Trial Balance")
     st.dataframe(tb_df, use_container_width=True)
     
     return df, kpis, summary_df
+
 
 
 
